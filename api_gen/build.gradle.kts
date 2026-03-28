@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.jvm)
     `maven-publish`
     application
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 java {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -29,12 +30,20 @@ publishing {
         create<MavenPublication>("release") {
             groupId = "com.github.cdAhmad"
             artifactId = "api-gen"
-            version = "1.0.7.6"
+            version = "1.0.1"
 
             // ✅ 修正：使用 "java" 而不是 "release"
             from(components["java"])   // ←←← 关键修复！
 
 
+        }
+        
+        // --- 发布到 Jitpack 配置 ---
+        create<MavenPublication>("shadow") {
+            groupId = "com.github.cdAhmad"
+            artifactId = "api-gen"
+            version = "1.0.1"
+            from(components["shadow"])
         }
     }
     repositories {
@@ -57,4 +66,14 @@ publishing {
 // --- Application 配置 ---
 application {
     mainClass = "com.cdahmod.api_gen.MainKt"
+}
+
+// --- ShadowJar 配置 ---
+shadowJar {
+    archiveBaseName.set("api-gen")
+    archiveVersion.set("1.0.1")
+    archiveClassifier.set("all")
+    manifest {
+        attributes["Main-Class"] = "com.cdahmod.api_gen.MainKt"
+    }
 }
