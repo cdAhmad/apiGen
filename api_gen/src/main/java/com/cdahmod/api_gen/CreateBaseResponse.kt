@@ -3,10 +3,10 @@ package com.cdahmod.api_gen
 import java.io.File
 
 class CreateBaseResponse {
-    fun createBaseResponse(modelPackage: String, outputDir: String) {
+    fun createBaseResponse(modelPackage: String, outputDir: String, baseResponseName: String = "BaseResponse") {
         // 将包路径转换为文件路径
         val packagePath = modelPackage.replace('.', '/')
-        val filePath = "$outputDir/$packagePath/BaseResponse.kt"
+        val filePath = "$outputDir/$packagePath/${baseResponseName}.kt"
 
         // 创建目录结构
         val directory = File(filePath).parentFile
@@ -28,7 +28,7 @@ import java.io.Serializable
  * @param `data` 通用对象，用于泛型推断
  */
 @KSerializable
-data class BaseResponse<T> (
+data class $baseResponseName<T> (
 
     /* 错误状态 */
     @SerialName(value = "code")
@@ -54,6 +54,6 @@ data class BaseResponse<T> (
         // 写入文件
         File(filePath).writeText(content)
 
-        println("Successfully created BaseResponse.kt file: $filePath")
+        println("Successfully created ${baseResponseName}.kt file: $filePath")
     }
 }

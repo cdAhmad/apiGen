@@ -47,5 +47,6 @@ jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "jetbrai
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 koltin-android = { id ="org.jetbrains.kotlin.android", version.ref = "kotlin" }
+shadow = { id ="com.github.johnrengelman.shadow", version = "7.1.2" }
 
 

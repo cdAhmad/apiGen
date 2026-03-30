@@ -3,7 +3,6 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.jvm)
     `maven-publish`
     application
-    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 java {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -32,48 +31,34 @@ publishing {
             artifactId = "api-gen"
             version = "1.0.1"
 
-            // ✅ 修正：使用 "java" 而不是 "release"
-            from(components["java"])   // ←←← 关键修复！
-
-
+            // 使用包含所有依赖的 jar 文件
+            artifact(tasks.jar)
         }
         
-        // --- 发布到 Jitpack 配置 ---
-        create<MavenPublication>("shadow") {
-            groupId = "com.github.cdAhmad"
-            artifactId = "api-gen"
-            version = "1.0.1"
-            from(components["shadow"])
-        }
+
     }
     repositories {
-        // 发布到本地 Maven (~/.m2/repository)
-//        mavenLocal()
 
-        // 如果发布到私有远程仓库
-        /*
-        maven {
-            url = uri("https://your.private.repo/repository/maven-releases/")
-            credentials {
-                username = "admin"
-                password = "password"
-            }
-        }
-        */
     }
 }
+
+
+
 
 // --- Application 配置 ---
 application {
     mainClass = "com.cdahmod.api_gen.MainKt"
 }
 
-// --- ShadowJar 配置 ---
-shadowJar {
+// --- Jar 配置 ---
+tasks.jar {
     archiveBaseName.set("api-gen")
     archiveVersion.set("1.0.1")
-    archiveClassifier.set("all")
     manifest {
         attributes["Main-Class"] = "com.cdahmod.api_gen.MainKt"
     }
+    // 包含所有依赖
+    from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
+    // 处理重复条目
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

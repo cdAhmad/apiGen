@@ -8,7 +8,11 @@ import java.io.File
 fun main(args: Array<String>) {
 
     // 加载配置文件
-    val configFile = File("config.json")
+    val configFile = if (args.isNotEmpty()) {
+        File(args[0])
+    } else {
+        File(System.getProperty("user.dir"), "config.json")
+    }
     if (!configFile.exists()) {
         println("config.json file does not exist, generating config file...")
         // Generate random salt value
@@ -28,7 +32,8 @@ fun main(args: Array<String>) {
             "apiPackage" to "com.temp.net.api",
             "modelPackage" to "com.temp.net.bean",
             "sourceFolder" to "src/main/kotlin",
-            "swaggerapiurl" to ""
+            "swaggerapiurl" to "",
+            "baseResponseName" to "BaseResponse"
         )
 
         // Save config file
@@ -51,6 +56,7 @@ fun main(args: Array<String>) {
     val apiPackage = if (config.has("apiPackage")) config.get("apiPackage").asString else "${packageName}.api"
     val sourceFolder = if (config.has("sourceFolder")) config.get("sourceFolder").asString else "src/main/kotlin"
     val swaggerApiUrl = if (config.has("swaggerapiurl")) config.get("swaggerapiurl").asString else ""
+    val baseResponseName = if (config.has("baseResponseName")) config.get("baseResponseName").asString else "BaseResponse"
 
     println("Configuration read from config file:")
     println("output_dir: $outputDir")
@@ -59,6 +65,7 @@ fun main(args: Array<String>) {
     println("api_package: $apiPackage")
     println("source_folder: $sourceFolder")
     println("swaggerapiurl: $swaggerApiUrl")
+    println("base_response_name: $baseResponseName")
 
     // 检查 swaggerApiUrl 是否有效
     if (swaggerApiUrl.isBlank()) {
@@ -78,7 +85,7 @@ fun main(args: Array<String>) {
     println("\nRunning clean_swagger_script...")
     val cleanSwaggerScript = CleanSwaggerScript()
     try {
-        cleanSwaggerScript.cleanSwagger(".api_gen/default_OpenAPI.json", ".api_gen/temp.json")
+        cleanSwaggerScript.cleanSwagger(".api_gen/default_OpenAPI.json", ".api_gen/temp.json", configFile.absolutePath)
         println("clean_swagger_script executed successfully")
     } catch (e: Exception) {
         println("clean_swagger_script execution failed: ${e.message}")
@@ -95,6 +102,32 @@ fun main(args: Array<String>) {
     // Use the OpenAPI generator from dependencies to generate Kotlin code
     println("\nRunning openapi-generator...")
     try {
+        // Create temporary directory for templates
+        val tempFile = File.createTempFile(".api_gen_build", null)
+        tempFile.delete()
+        tempFile.mkdirs()
+        val templateDir = File(tempFile, "templates")
+        templateDir.mkdirs()
+        
+        // Copy api.mustache from resources to temporary directory
+        val templateStream = Class.forName("com.cdahmod.api_gen.MainKt").classLoader.getResourceAsStream("templates/api.mustache")
+        if (templateStream != null) {
+            val templateFile = File(templateDir, "api.mustache")
+            val outputStream = templateFile.outputStream()
+            try {
+                val buffer = ByteArray(1024)
+                var length: Int
+                while (templateStream.read(buffer).also { length = it } > 0) {
+                    outputStream.write(buffer, 0, length)
+                }
+            } finally {
+                templateStream.close()
+                outputStream.close()
+            }
+        } else {
+            throw Exception("api.mustache template not found in resources")
+        }
+        
         val args = arrayOf(
             "generate",
             "-i",
@@ -104,15 +137,18 @@ fun main(args: Array<String>) {
             "-o",
             outputDir,
             "--template-dir",
-            ".",
+            tempFile.absolutePath,
             "--global-property",
             "apis,models,modelDocs",
             "--additional-properties",
-            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=true,library=jvm-retrofit2,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
+            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=true,library=jvm-retrofit2,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder,baseResponseName=$baseResponseName"
         )
         println("Execution parameters: ${args.joinToString(" ")}")
         OpenAPIGenerator.main(args)
         println("openapi-generator executed successfully")
+        
+        // Clean up temporary directory
+        tempFile.deleteRecursively()
     } catch (e: Exception) {
         println("openapi-generator execution failed: ${e.message}")
         e.printStackTrace()
@@ -129,7 +165,7 @@ fun main(args: Array<String>) {
     println("\nRunning create_base_response...")
     try {
         val createBaseResponse = CreateBaseResponse()
-        createBaseResponse.createBaseResponse(modelPackage, "$outputDir/$sourceFolder")
+        createBaseResponse.createBaseResponse(modelPackage, "$outputDir/$sourceFolder", baseResponseName)
         println("create_base_response executed successfully")
     } catch (e: Exception) {
         println("create_base_response execution failed: ${e.message}")
