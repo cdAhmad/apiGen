@@ -21,7 +21,7 @@ dependencies {
 }
 
 // 3. 创建任务 generateSwaggerApi
-tasks.register<JavaExec>("generateSwaggerApi") {
+tasks.register<JavaExec>("generateSwaggerApiWithApp") {
     description = "Generate API code using apiGen from swagger api url"
     group = "generation"
     mainClass.set("com.cdahmod.api_gen.MainKt")

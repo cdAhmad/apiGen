@@ -1,5 +1,7 @@
 #  swagger 接口文档转 koltin 代码
 
+[![Release](https://www.jitpack.io/v/cdAhmad/apigen.svg)]
+
 ### 引入方式
 1. 直接项目中引用
 2. 作为单独module 引入
@@ -12,7 +14,7 @@ val apiGenConfigurable by configurations.creating
 
 dependencies {
     // 2. 依赖 apiGenConfigurable 配置
-    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.2")
+    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.3")
 }
 
 // 3. 创建任务 generateSwaggerApi
@@ -49,7 +51,7 @@ val apiGenConfigurable by configurations.creating
 
 dependencies {
     // 2. 依赖 apiGenConfigurable 配置
-    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.2")
+    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.3")
 }
 
 // 3. 创建任务 generateSwaggerApi
