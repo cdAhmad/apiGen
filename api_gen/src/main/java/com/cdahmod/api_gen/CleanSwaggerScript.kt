@@ -11,19 +11,8 @@ import java.math.BigInteger
 import java.util.*
 import kotlin.collections.iterator
 
-class CleanSwaggerScript {
-    fun loadConfig(configFile: String = "config.json"): Map<String, Any> {
-        val file = File(configFile)
-        if (file.exists()) {
-            val gson = Gson()
-            val jsonObject = gson.fromJson(file.readText(), JsonObject::class.java)
-            return jsonObject.asMap()
-        } else {
-            throw FileNotFoundException("Config file $configFile does not exist, please run MainKt first to generate the config file")
-        }
-    }
-
-    fun generateFieldName(original: String, salt: String): String {
+class CleanSwaggerScript(private val salt: String, private val apiName: String = "Default", private val obfuscateOperationId: Boolean = true) {
+    fun generateFieldName(original: String): String {
         if (salt.isBlank()) {
             throw IllegalArgumentException("salt must not be blank")
         }
@@ -62,10 +51,7 @@ class CleanSwaggerScript {
         return result.substring(0, 1).uppercase() + result.substring(1)
     }
 
-    fun cleanSwagger(inputFile: String, outputFile: String, configFile: String = "config.json") {
-        // 加载配置
-        val config = loadConfig(configFile)
-        val salt = config.getOrDefault("salt", "default-salt").toString()
+    fun cleanSwagger(inputFile: String, outputFile: String) {
 
         // 加载swagger文件
         val gson = Gson()
@@ -110,11 +96,9 @@ class CleanSwaggerScript {
 
         // 1.1 处理tags，支持自定义tag值
         var updateTagCount = 0
-        // 优先使用config中的customTag，如果没有则使用全局tags列表的第一个tag
-        val customTag = config.getOrDefault("customTag", "Default").toString()
-
-        var targetTag: String? = customTag
-        println("Using custom tag from config: $targetTag")
+        // 使用 apiName
+        var targetTag: String? = apiName
+        println("Using api name: $targetTag")
 
         if (swagger.has("paths") && targetTag != null) {
             val paths = swagger.getAsJsonObject("paths")
@@ -144,20 +128,24 @@ class CleanSwaggerScript {
                 for (methodEntry in pathObject.entrySet()) {
                     val method = methodEntry.key
                     val operation = methodEntry.value as JsonObject
-                    if (operation.has("operationId")) {
-                        val originalOperationId = operation.get("operationId").asString
-                        // 生成混淆后的 operationId
-                        var hashedOperationId = generateFieldName(originalOperationId, salt)
-                        // 确保首字母是小写
-                        hashedOperationId = hashedOperationId.substring(0, 1).lowercase() + hashedOperationId.substring(1)
-                        // 更新 operationId
-                        operation.addProperty("operationId", hashedOperationId)
-                        operationIdCount++
-                    }
+                    if (operation.has("operationId") && obfuscateOperationId) {
+                    val originalOperationId = operation.get("operationId").asString
+                    // 生成混淆后的 operationId
+                    var hashedOperationId = generateFieldName(originalOperationId)
+                    // 确保首字母是小写
+                    hashedOperationId = hashedOperationId.substring(0, 1).lowercase() + hashedOperationId.substring(1)
+                    // 更新 operationId
+                    operation.addProperty("operationId", hashedOperationId)
+                    operationIdCount++
+                }
                 }
             }
+        }        
+        if (obfuscateOperationId) {
+            println("Obfuscated $operationIdCount operationId values")
+        } else {
+            println("Skipped operationId obfuscation")
         }
-        println("Obfuscated $operationIdCount operationId values")
 
         // 2. 移除originalRef属性
         fun removeOriginalRef(obj: JsonElement) {
@@ -297,7 +285,7 @@ class CleanSwaggerScript {
             // 先创建映射关系
             for (entry in definitions.entrySet()) {
                 val modelName = entry.key
-                var hashedName = generateFieldName(modelName, salt)
+                var hashedName = generateFieldName(modelName)
                 // 如果原始model名称以"公共响应体"开头，则在混淆后的名称后面添加"_Response"后缀
                 if (modelName.startsWith("公共响应体")) {
                     hashedName += "_Response"

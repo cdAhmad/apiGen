@@ -1,64 +1,48 @@
 package com.cdahmod.api_gen
 
-import com.google.gson.Gson
-import com.google.gson.JsonObject
 import org.openapitools.codegen.OpenAPIGenerator
 import java.io.File
 
 fun main(args: Array<String>) {
 
-    // 加载配置文件
-    val configFile = if (args.isNotEmpty()) {
-        File(args[0])
-    } else {
-        File(System.getProperty("user.dir"), "config.json")
-    }
-    if (!configFile.exists()) {
-        println("config.json file does not exist, generating config file...")
-        // Generate random salt value
-        fun generateRandomSalt(length: Int = 32): String {
-            val chars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
-            return (1..length)
-                .map { chars.random() }
-                .joinToString("")
+    // 解析命令行参数
+    val params = mutableMapOf<String, String>()
+    var i = 0
+    while (i < args.size) {
+        if (args[i].startsWith("--")) {
+            val key = args[i].substring(2)
+            if (i + 1 < args.size && !args[i + 1].startsWith("--")) {
+                params[key] = args[i + 1]
+                i += 2
+            } else {
+                params[key] = ""
+                i += 1
+            }
+        } else {
+            i += 1
         }
+    }
 
-        // Generate default config
-        val defaultConfig = mutableMapOf(
-            "salt" to "swagger-kotlin-codegen-salt-${generateRandomSalt()}",
-            "customTag" to "Default",
-            "outputDir" to "generated-code",
-            "package" to "com.temp.net",
-            "apiPackage" to "com.temp.net.api",
-            "modelPackage" to "com.temp.net.bean",
-            "sourceFolder" to "src/main/kotlin",
-            "swaggerapiurl" to "",
-            "baseResponseName" to "BaseResponse"
-        )
-
-        // Save config file
-        val gson = Gson().newBuilder().setPrettyPrinting().create()
-        val jsonString = gson.toJson(defaultConfig)
-        configFile.writeText(jsonString)
-        println("Generated default config file: ${configFile.name}")
-        println("Please configure config.json file and run the script again")
+    // 从命令行参数中读取配置项
+    val outputDir = params.getOrDefault("outputDir", "generated-code")
+    val packageName = params.getOrDefault("package", "com.temp.net")
+    val modelPackage = params.getOrDefault("modelPackage", "${packageName}.bean")
+    val apiPackage = params.getOrDefault("apiPackage", "${packageName}.api")
+    val sourceFolder = params.getOrDefault("sourceFolder", "src/main/kotlin")
+    val swaggerApiUrl = params.getOrDefault("swaggerApiUrl", "")
+    val baseResponseName = params.getOrDefault("baseResponseName", "BaseResponse")
+    val apiName = params.getOrDefault("apiName", "Default")
+    val obfuscateOperationId = params.getOrDefault("obfuscateOperationId", "true").toBoolean()
+    
+    // salt 为必传参数，为其添加前缀
+    val saltInput = params["salt"]
+    if (saltInput.isNullOrBlank()) {
+        println("Error: salt is required")
         return
     }
+    val salt = "swagger-kotlin-codegen-salt-$saltInput"
 
-    // 读取配置文件
-    val config =
-        Gson().fromJson(configFile.readText(), JsonObject::class.java)
-
-    // 从配置文件中读取配置项
-    val outputDir = if (config.has("outputDir")) config.get("outputDir").asString else "generated-code"
-    val packageName = if (config.has("package")) config.get("package").asString else "com.temp.net"
-    val modelPackage = if (config.has("modelPackage")) config.get("modelPackage").asString else "${packageName}.bean"
-    val apiPackage = if (config.has("apiPackage")) config.get("apiPackage").asString else "${packageName}.api"
-    val sourceFolder = if (config.has("sourceFolder")) config.get("sourceFolder").asString else "src/main/kotlin"
-    val swaggerApiUrl = if (config.has("swaggerapiurl")) config.get("swaggerapiurl").asString else ""
-    val baseResponseName = if (config.has("baseResponseName")) config.get("baseResponseName").asString else "BaseResponse"
-
-    println("Configuration read from config file:")
+    println("Configuration from command line arguments:")
     println("output_dir: $outputDir")
     println("package: $packageName")
     println("model_package: $modelPackage")
@@ -66,6 +50,9 @@ fun main(args: Array<String>) {
     println("source_folder: $sourceFolder")
     println("swaggerapiurl: $swaggerApiUrl")
     println("base_response_name: $baseResponseName")
+    println("salt: $salt")
+    println("apiName: $apiName")
+    println("obfuscateOperationId: $obfuscateOperationId")
 
     // 检查 swaggerApiUrl 是否有效
     if (swaggerApiUrl.isBlank()) {
@@ -74,18 +61,20 @@ fun main(args: Array<String>) {
     }
 
     // 运行 swagger 更新流程
-    val updater = SwaggerUpdater(mapOf(
-        "swaggerapiurl" to swaggerApiUrl
-    ))
+    val updater = SwaggerUpdater(
+        mapOf(
+            "swaggerapiurl" to swaggerApiUrl
+        )
+    )
     if (!updater.run()) {
         return
     }
 
     // Run clean_swagger_script
     println("\nRunning clean_swagger_script...")
-    val cleanSwaggerScript = CleanSwaggerScript()
+    val cleanSwaggerScript = CleanSwaggerScript(salt, apiName, obfuscateOperationId)
     try {
-        cleanSwaggerScript.cleanSwagger(".api_gen/default_OpenAPI.json", ".api_gen/temp.json", configFile.absolutePath)
+        cleanSwaggerScript.cleanSwagger(".api_gen/default_OpenAPI.json", ".api_gen/temp.json")
         println("clean_swagger_script executed successfully")
     } catch (e: Exception) {
         println("clean_swagger_script execution failed: ${e.message}")
@@ -102,32 +91,45 @@ fun main(args: Array<String>) {
     // Use the OpenAPI generator from dependencies to generate Kotlin code
     println("\nRunning openapi-generator...")
     try {
-        // Create temporary directory for templates
-        val tempFile = File.createTempFile(".api_gen_build", null)
-        tempFile.delete()
-        tempFile.mkdirs()
-        val templateDir = File(tempFile, "templates")
-        templateDir.mkdirs()
-        
-        // Copy api.mustache from resources to temporary directory
-        val templateStream = Class.forName("com.cdahmod.api_gen.MainKt").classLoader.getResourceAsStream("templates/api.mustache")
-        if (templateStream != null) {
-            val templateFile = File(templateDir, "api.mustache")
-            val outputStream = templateFile.outputStream()
-            try {
-                val buffer = ByteArray(1024)
-                var length: Int
-                while (templateStream.read(buffer).also { length = it } > 0) {
-                    outputStream.write(buffer, 0, length)
+        // Use .api_gen/templates directory for templates
+        val apiGenDir = File(".api_gen")
+        if (!apiGenDir.exists()) {
+            apiGenDir.mkdirs()
+        }
+        // OpenAPI Generator Kotlin generator expects templates in 'kotlin' subdirectory
+
+
+        // Copy api.mustache from resources to template directory
+        println("Template directory: ${apiGenDir.absolutePath}")
+        val templateFile = File(apiGenDir, "api.mustache")
+        println("Checking if template file exists: ${templateFile.absolutePath}")
+        if (!templateFile.exists()) {
+            println("Template file does not exist, copying from resources...")
+            val templateStream =
+                Class.forName("com.cdahmod.api_gen.MainKt").classLoader.getResourceAsStream("templates/api.mustache")
+            if (templateStream != null) {
+                val outputStream = templateFile.outputStream()
+                try {
+                    val buffer = ByteArray(1024)
+                    var length: Int
+                    while (templateStream.read(buffer).also { length = it } > 0) {
+                        outputStream.write(buffer, 0, length)
+                    }
+                } finally {
+                    templateStream.close()
+                    outputStream.close()
                 }
-            } finally {
-                templateStream.close()
-                outputStream.close()
+                println("Copied api.mustache template to: ${templateFile.absolutePath}")
+            } else {
+                throw Exception("api.mustache template not found in resources")
             }
         } else {
-            throw Exception("api.mustache template not found in resources")
+            println("api.mustache template already exists at: ${templateFile.absolutePath}, skipping copy")
         }
-        
+        //将 模板文件 中 BaseResponse 字符串 替换为 baseResponseName
+        val baseResponseRegex = Regex("BaseResponse")
+        val templateContent = templateFile.readText().replace(baseResponseRegex, baseResponseName)
+        templateFile.writeText(templateContent)
         val args = arrayOf(
             "generate",
             "-i",
@@ -137,35 +139,34 @@ fun main(args: Array<String>) {
             "-o",
             outputDir,
             "--template-dir",
-            tempFile.absolutePath,
+            apiGenDir.absolutePath,
             "--global-property",
             "apis,models,modelDocs",
             "--additional-properties",
-            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=true,library=jvm-retrofit2,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder,baseResponseName=$baseResponseName"
+            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=true,library=jvm-retrofit2,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
         )
         println("Execution parameters: ${args.joinToString(" ")}")
         OpenAPIGenerator.main(args)
         println("openapi-generator executed successfully")
-        
-        // Clean up temporary directory
-        tempFile.deleteRecursively()
+
     } catch (e: Exception) {
         println("openapi-generator execution failed: ${e.message}")
         e.printStackTrace()
     }
 
     // Check if generation was successful
-    val outputDirFile = File(outputDir)
-    if (!outputDirFile.exists()) {
-        println("Error: Generation failed, output directory was not created")
-        return
-    }
+
 
     // Call create_base_response
     println("\nRunning create_base_response...")
     try {
         val createBaseResponse = CreateBaseResponse()
-        createBaseResponse.createBaseResponse(modelPackage, "$outputDir/$sourceFolder", baseResponseName)
+        val effectiveOutputDir = if (outputDir.isBlank()) "." else outputDir
+        createBaseResponse.createBaseResponse(
+            modelPackage,
+            "$effectiveOutputDir/$sourceFolder",
+            baseResponseName
+        )
         println("create_base_response executed successfully")
     } catch (e: Exception) {
         println("create_base_response execution failed: ${e.message}")
