@@ -82,6 +82,26 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
                                     // 如果没有name属性，使用参数的in值作为默认name
                                     param.addProperty("name", param.get("in")?.asString ?: "param")
                                 }
+                                
+                                // 处理query参数中type字段错误的情况
+                                if (param.get("in")?.asString == "query" && param.has("type")) {
+                                    val validTypes = setOf("string", "number", "integer", "boolean", "array", "object")
+                                    val originalType = param.get("type").asString
+                                    if (!validTypes.contains(originalType)) {
+                                        // 将错误的type转换为string
+                                        param.addProperty("type", "string")
+                                        
+                                        // 在description中追加转换错误信息及原始type
+                                        val errorMessage = "注意：参数类型已从 $originalType 转换为 string（类型错误）"
+                                        if (param.has("description")) {
+                                            val currentDesc = param.get("description").asString
+                                            param.addProperty("description", "$currentDesc\n$errorMessage")
+                                        } else {
+                                            param.addProperty("description", errorMessage)
+                                        }
+                                    }
+                                }
+                                
                                 filteredParams.add(param)
                             }
                         }
@@ -168,20 +188,51 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
         val responseModelsToRemove = mutableMapOf<String, JsonObject>()
         val dataModelMapping = mutableMapOf<String, JsonElement>()
 
-        if (swagger.has("definitions")) {
-            val definitions = swagger.getAsJsonObject("definitions")
-            for (entry in definitions.entrySet()) {
-                val modelName = entry.key
-                val model = entry.value as JsonObject
-                if (model.has("properties")) {
-                    val props = model.getAsJsonObject("properties")
-                    if (props.has("code") && props.has("msg") && props.has("data")) {
-                        // 这是一个响应体模型，需要处理
-                        responseModelsToRemove[modelName] = model
-                        // 提取 data 字段的内容
-                        val dataProp = props.get("data")
-                        // 记录映射关系：响应体模型 -> data 内容
-                        dataModelMapping[modelName] = dataProp
+        // 遍历 paths，找到 responses 中指向的 model
+        if (swagger.has("paths")) {
+            val paths = swagger.getAsJsonObject("paths")
+            for (entry in paths.entrySet()) {
+                val path = entry.key
+                val pathObject = entry.value as JsonObject
+                for (methodEntry in pathObject.entrySet()) {
+                    val method = methodEntry.key
+                    val operation = methodEntry.value as JsonObject
+                    if (operation.has("responses")) {
+                        val responses = operation.getAsJsonObject("responses")
+                        for (responseEntry in responses.entrySet()) {
+                            val responseCode = responseEntry.key
+                            val response = responseEntry.value as JsonObject
+                            if (response.has("schema") && response.getAsJsonObject("schema").has("\$ref")) {
+                                val ref = response.getAsJsonObject("schema").get("\$ref").asString
+                                val modelName = ref.split('/').last()
+                                
+                                // 检查这个 model 是否包含 code、msg 字段
+                                if (swagger.has("definitions")) {
+                                    val definitions = swagger.getAsJsonObject("definitions")
+                                    if (definitions.has(modelName)) {
+                                        val model = definitions.getAsJsonObject(modelName)
+                                        if (model.has("properties")) {
+                                            val props = model.getAsJsonObject("properties")
+                                            if (props.has("code") && props.has("msg")) {
+                                                // 这是一个响应体模型，需要处理
+                                                responseModelsToRemove[modelName] = model
+                                                // 提取 data 字段的内容，如果没有则使用空对象
+                                                val dataProp = if (props.has("data")) {
+                                                    props.get("data")
+                                                } else {
+                                                    // 创建一个空的 object 类型
+                                                    val emptyObject = JsonObject()
+                                                    emptyObject.addProperty("type", "object")
+                                                    emptyObject
+                                                }
+                                                // 记录映射关系：响应体模型 -> data 内容
+                                                dataModelMapping[modelName] = dataProp
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -244,6 +295,14 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
                         for (responseEntry in responses.entrySet()) {
                             val code = responseEntry.key
                             val response = responseEntry.value as JsonObject
+                            
+                            // 如果 response 没有 schema，添加一个空的 object 作为兜底
+                            if (!response.has("schema")) {
+                                val emptyObjectSchema = JsonObject()
+                                emptyObjectSchema.addProperty("type", "object")
+                                response.add("schema", emptyObjectSchema)
+                            }
+                            
                             try {
                                 val codeNum = code.toInt()
                                 if (codeNum in 100..599) {
@@ -286,10 +345,6 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
             for (entry in definitions.entrySet()) {
                 val modelName = entry.key
                 var hashedName = generateFieldName(modelName)
-                // 如果原始model名称以"公共响应体"开头，则在混淆后的名称后面添加"_Response"后缀
-                if (modelName.startsWith("公共响应体")) {
-                    hashedName += "_Response"
-                }
                 refMapping[modelName] = hashedName
                 newDefinitions.add(hashedName, entry.value)
             }
@@ -332,6 +387,14 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
                                         val modelName = ref.split('/').last()
                                         if (refMapping.containsKey(modelName)) {
                                             schema.addProperty("\$ref", "#/definitions/${refMapping[modelName]}")
+                                        }
+                                    } else if (schema.has("items") && schema.getAsJsonObject("items").has("\$ref")) {
+                                        // 处理数组类型的引用
+                                        val items = schema.getAsJsonObject("items")
+                                        val ref = items.get("\$ref").asString
+                                        val modelName = ref.split('/').last()
+                                        if (refMapping.containsKey(modelName)) {
+                                            items.addProperty("\$ref", "#/definitions/${refMapping[modelName]}")
                                         }
                                     }
                                 }

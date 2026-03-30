@@ -22,6 +22,7 @@ dependencies {
     implementation("org.openapitools:openapi-generator-cli:7.21.0")
 
 }
+val JarVersion="1.0.2"
 
 // --- Maven Publish 配置 ---
 publishing {
@@ -29,7 +30,7 @@ publishing {
         create<MavenPublication>("release") {
             groupId = "com.github.cdAhmad"
             artifactId = "api-gen"
-            version = "1.0.1"
+            version = JarVersion
 
             // 使用包含所有依赖的 jar 文件
             artifact(tasks.jar)
@@ -53,7 +54,7 @@ application {
 // --- Jar 配置 ---
 tasks.jar {
     archiveBaseName.set("api-gen")
-    archiveVersion.set("1.0.1")
+    archiveVersion.set(JarVersion)
     manifest {
         attributes["Main-Class"] = "com.cdahmod.api_gen.MainKt"
     }
