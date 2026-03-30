@@ -33,6 +33,7 @@ fun main(args: Array<String>) {
     val baseResponseName = params.getOrDefault("baseResponseName", "BaseResponse")
     val apiName = params.getOrDefault("apiName", "Default")
     val obfuscateOperationId = params.getOrDefault("obfuscateOperationId", "true").toBoolean()
+    val apiGenDir = params.getOrDefault("apiGenDir", ".api_gen")
     
     // salt 为必传参数，为其添加前缀
     val saltInput = params["salt"]
@@ -53,6 +54,7 @@ fun main(args: Array<String>) {
     println("salt: $salt")
     println("apiName: $apiName")
     println("obfuscateOperationId: $obfuscateOperationId")
+    println("apiGenDir: $apiGenDir")
 
     // 检查 swaggerApiUrl 是否有效
     if (swaggerApiUrl.isBlank()) {
@@ -63,7 +65,8 @@ fun main(args: Array<String>) {
     // 运行 swagger 更新流程
     val updater = SwaggerUpdater(
         mapOf(
-            "swaggerapiurl" to swaggerApiUrl
+            "swaggerapiurl" to swaggerApiUrl,
+            "apiGenDir" to apiGenDir
         )
     )
     if (!updater.run()) {
@@ -74,7 +77,7 @@ fun main(args: Array<String>) {
     println("\nRunning clean_swagger_script...")
     val cleanSwaggerScript = CleanSwaggerScript(salt, apiName, obfuscateOperationId)
     try {
-        cleanSwaggerScript.cleanSwagger(".api_gen/default_OpenAPI.json", ".api_gen/temp.json")
+        cleanSwaggerScript.cleanSwagger("$apiGenDir/logs/default_OpenAPI.json", "$apiGenDir/logs/temp.json")
         println("clean_swagger_script executed successfully")
     } catch (e: Exception) {
         println("clean_swagger_script execution failed: ${e.message}")
@@ -82,7 +85,7 @@ fun main(args: Array<String>) {
     }
 
     // Check if temp.json was generated
-    val tempJson = File(".api_gen/temp.json")
+    val tempJson = File("$apiGenDir/logs/temp.json")
     if (!tempJson.exists()) {
         println("Error: temp.json file was not generated, please check if clean_swagger_script ran successfully")
         return
@@ -91,17 +94,17 @@ fun main(args: Array<String>) {
     // Use the OpenAPI generator from dependencies to generate Kotlin code
     println("\nRunning openapi-generator...")
     try {
-        // Use .api_gen/templates directory for templates
-        val apiGenDir = File(".api_gen")
-        if (!apiGenDir.exists()) {
-            apiGenDir.mkdirs()
+        // Use apiGenDir/logs directory for templates
+        val apiGenDirFile = File(apiGenDir)
+        if (!apiGenDirFile.exists()) {
+            apiGenDirFile.mkdirs()
         }
         // OpenAPI Generator Kotlin generator expects templates in 'kotlin' subdirectory
 
 
         // Copy api.mustache from resources to template directory
-        println("Template directory: ${apiGenDir.absolutePath}")
-        val templateFile = File(apiGenDir, "api.mustache")
+        println("Template directory: ${apiGenDirFile.absolutePath}")
+        val templateFile = File(apiGenDir, "logs/api.mustache")
         println("Checking if template file exists: ${templateFile.absolutePath}")
         if (!templateFile.exists()) {
             println("Template file does not exist, copying from resources...")
@@ -133,15 +136,15 @@ fun main(args: Array<String>) {
         val args = arrayOf(
             "generate",
             "-i",
-            ".api_gen/temp.json",
+            "$apiGenDir/logs/temp.json",
             "-g",
             "kotlin",
             "-o",
             outputDir,
             "--template-dir",
-            apiGenDir.absolutePath,
+            "$apiGenDir/logs",
             "--global-property",
-            "apis,models,modelDocs",
+            "apis,models,modelDocs,modelTests=false,apiTests=false",
             "--additional-properties",
             "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=true,library=jvm-retrofit2,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
         )

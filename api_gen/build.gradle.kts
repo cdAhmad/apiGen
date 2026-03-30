@@ -22,7 +22,7 @@ dependencies {
     implementation("org.openapitools:openapi-generator-cli:7.21.0")
 
 }
-val JarVersion="1.0.2"
+val JarVersion="1.0.3"
 
 // --- Maven Publish 配置 ---
 publishing {

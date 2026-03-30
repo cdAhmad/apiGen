@@ -25,4 +25,5 @@ dependencyResolutionManagement {120
 rootProject.name = "apiGen"
 
 include(":api_gen")
-//include(":myapplication")
+include(":myapplication")
+include(":gen_module")

@@ -14,10 +14,10 @@ import kotlin.collections.iterator
 
 class SwaggerUpdater(private val config: Map<String, Any>) {
     private val swaggerApiUrl: String = config.getOrDefault("swaggerapiurl", "").toString()
-    private val apiGenDir: String = ".api_gen"
-    private val downloadedFile: String = "$apiGenDir/default_OpenAPI.json"
+    private val apiGenDir: String = config.getOrDefault("apiGenDir", ".api_gen").toString()
     private val logDir: String = "$apiGenDir/logs"
-    private val logFile: String = "$logDir/swagger_update.log"
+    private val downloadedFile: String = "$logDir/default_OpenAPI.json" // 移动到logs目录
+    private val logFile: String = "${apiGenDir}/swagger_update.log" // 移动到apiGen目录外
     private val md5File: String = "$logDir/swagger_md5.txt"
     private val oldFile: String = "$logDir/swagger_old.json"
 
