@@ -167,4 +167,9 @@ Same configuration as Option 1, but in a dedicated module.
 
 ## Support
 
-For issues or feature requests, please check the project repository.
+For issues or feature requests, please visit the GitHub repository:
+https://github.com/cdAhmad/apigen
+
+## Related Tools
+
+- **Swagglog**: A logging tool for Swagger APIs. Visit: https://github.com/cdAhmad/swiggerlog
