@@ -74,8 +74,11 @@ repositories {
 val apiGenConfigurable by configurations.creating
 
 dependencies {
-    // 2. 添加 API Gen 依赖
-    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.3")
+    // 2. 添加 API Gen 依赖（+ 表示自动使用最新版本，适合开发调试）
+    apiGenConfigurable("com.github.cdAhmad:apigen:+")
+    
+    // 生产环境建议锁定具体版本号，例如：
+    // apiGenConfigurable("com.github.cdAhmad:apigen:1.1.0")
 }
 
 // 3. 创建生成任务

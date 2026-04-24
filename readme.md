@@ -14,7 +14,7 @@ val apiGenConfigurable by configurations.creating
 
 dependencies {
     // 2. 依赖 apiGenConfigurable 配置
-    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.3")
+    apiGenConfigurable("com.github.cdAhmad:apigen:+") // + 自动使用最新版本，生产环境建议锁定具体版本号
 }
 
 // 3. 创建任务 generateSwaggerApi
@@ -51,7 +51,7 @@ val apiGenConfigurable by configurations.creating
 
 dependencies {
     // 2. 依赖 apiGenConfigurable 配置
-    apiGenConfigurable("com.github.cdAhmad:apigen:1.0.3")
+    apiGenConfigurable("com.github.cdAhmad:apigen:+") // + 自动使用最新版本，生产环境建议锁定具体版本号
 }
 
 // 3. 创建任务 generateSwaggerApi

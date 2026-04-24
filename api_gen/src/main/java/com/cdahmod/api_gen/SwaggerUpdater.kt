@@ -16,6 +16,7 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
     private val swaggerApiUrl: String = config.getOrDefault("swaggerapiurl", "").toString()
     private val apiGenDir: String = config.getOrDefault("apiGenDir", ".api_gen").toString()
     private val logDir: String = "$apiGenDir/logs"
+    private val historyDir: String = "$apiGenDir/history"
     private val downloadedFile: String = "$logDir/default_OpenAPI.json" // 移动到logs目录
     private val logFile: String = "${apiGenDir}/swagger_update.log" // 移动到apiGen目录外
     private val md5File: String = "$logDir/swagger_md5.txt"
@@ -25,6 +26,7 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
         // 确保 .api_gen 目录和日志目录存在
         File(apiGenDir).mkdirs()
         File(logDir).mkdirs()
+        File(historyDir).mkdirs()
     }
 
     fun downloadSwaggerJson(): Boolean {
@@ -114,9 +116,129 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
                         val oldResponses = oldOperation.getAsJsonObject("responses")?.toString() ?: "{}"
                         val newResponses = newOperation.getAsJsonObject("responses")?.toString() ?: "{}"
 
-                        if (oldParams != newParams || oldResponses != newResponses) {
+                        val paramsChanged = oldParams != newParams
+                        val responsesChanged = oldResponses != newResponses
+                        if (paramsChanged || responsesChanged) {
                             val summary = newOperation.get("summary")?.asString ?: "无描述"
-                            changes["modified_paths"]?.add("${method.uppercase()} $path - $summary")
+                            val changeType = when {
+                                paramsChanged && responsesChanged -> "[参数+响应变更]"
+                                paramsChanged -> "[参数变更]"
+                                responsesChanged -> "[响应变更]"
+                                else -> ""
+                            }
+
+                            // 参数详情对比
+                            val paramDetails = mutableListOf<String>()
+                            if (paramsChanged) {
+                                val oldParamsArray = oldOperation.getAsJsonArray("parameters")
+                                val newParamsArray = newOperation.getAsJsonArray("parameters")
+                                val oldParamMap = oldParamsArray?.mapNotNull {
+                                    it as? JsonObject
+                                }?.associateBy { it.get("name")?.asString ?: "" } ?: emptyMap()
+                                val newParamMap = newParamsArray?.mapNotNull {
+                                    it as? JsonObject
+                                }?.associateBy { it.get("name")?.asString ?: "" } ?: emptyMap()
+
+                                val oldParamNames = oldParamMap.keys.filter { it.isNotEmpty() }.toSet()
+                                val newParamNames = newParamMap.keys.filter { it.isNotEmpty() }.toSet()
+                                val addedParams = newParamNames - oldParamNames
+                                val removedParams = oldParamNames - newParamNames
+                                if (addedParams.isNotEmpty()) paramDetails.add("新增参数: ${addedParams.joinToString(", ")}")
+                                if (removedParams.isNotEmpty()) paramDetails.add("删除参数: ${removedParams.joinToString(", ")}")
+
+                                // 同名参数属性变化
+                                for (name in oldParamNames.intersect(newParamNames)) {
+                                    val oldParam = oldParamMap[name]!!
+                                    val newParam = newParamMap[name]!!
+                                    val oldType = oldParam.get("type")?.asString
+                                        ?: oldParam.getAsJsonObject("schema")?.get("type")?.asString ?: "unknown"
+                                    val newType = newParam.get("type")?.asString
+                                        ?: newParam.getAsJsonObject("schema")?.get("type")?.asString ?: "unknown"
+                                    if (oldType != newType) {
+                                        paramDetails.add("$name 类型变更: $oldType -> $newType")
+                                    }
+                                    val oldRequired = oldParam.get("required")?.asBoolean ?: false
+                                    val newRequired = newParam.get("required")?.asBoolean ?: false
+                                    if (oldRequired != newRequired) {
+                                        paramDetails.add("$name 必填变更: ${if (oldRequired) "必填" else "可选"} -> ${if (newRequired) "必填" else "可选"}")
+                                    }
+                                    val oldIn = oldParam.get("in")?.asString ?: ""
+                                    val newIn = newParam.get("in")?.asString ?: ""
+                                    if (oldIn != newIn) {
+                                        paramDetails.add("$name 位置变更: $oldIn -> $newIn")
+                                    }
+                                }
+                            }
+
+                            // 响应详情对比
+                            val responseDetails = mutableListOf<String>()
+                            if (responsesChanged) {
+                                val oldResponsesObj = oldOperation.getAsJsonObject("responses")
+                                val newResponsesObj = newOperation.getAsJsonObject("responses")
+                                val oldResponseCodes = oldResponsesObj?.keySet() ?: emptySet()
+                                val newResponseCodes = newResponsesObj?.keySet() ?: emptySet()
+                                val addedResponses = newResponseCodes - oldResponseCodes
+                                val removedResponses = oldResponseCodes - newResponseCodes
+                                if (addedResponses.isNotEmpty()) responseDetails.add("新增响应码: ${addedResponses.joinToString(", ")}")
+                                if (removedResponses.isNotEmpty()) responseDetails.add("删除响应码: ${removedResponses.joinToString(", ")}")
+
+                                // 同响应码下 schema/响应体字段变化
+                                for (code in oldResponseCodes.intersect(newResponseCodes)) {
+                                    val oldResponse = oldResponsesObj?.getAsJsonObject(code)
+                                    val newResponse = newResponsesObj?.getAsJsonObject(code)
+                                    if (oldResponse.toString() != newResponse.toString()) {
+                                        val parts = mutableListOf<String>()
+
+                                        // description 变更
+                                        val oldDesc = oldResponse?.get("description")?.asString ?: ""
+                                        val newDesc = newResponse?.get("description")?.asString ?: ""
+                                        if (oldDesc != newDesc) {
+                                            parts.add("描述变更")
+                                        }
+
+                                        // schema 变更
+                                        val oldSchema = oldResponse?.getAsJsonObject("schema")
+                                        val newSchema = newResponse?.getAsJsonObject("schema")
+                                        if (oldSchema?.has("\$ref") == true && newSchema?.has("\$ref") == true) {
+                                            val oldRef = oldSchema.get("\$ref").asString
+                                            val newRef = newSchema.get("\$ref").asString
+                                            if (oldRef != newRef) {
+                                                parts.add("引用变更: $oldRef -> $newRef")
+                                            }
+                                        } else if (oldSchema?.has("properties") == true && newSchema?.has("properties") == true) {
+                                            val oldPropsObj = oldSchema.getAsJsonObject("properties")
+                                            val newPropsObj = newSchema.getAsJsonObject("properties")
+                                            val oldProps = oldPropsObj.keySet()
+                                            val newProps = newPropsObj.keySet()
+                                            val addedProps = newProps - oldProps
+                                            val removedProps = oldProps - newProps
+                                            if (addedProps.isNotEmpty()) parts.add("新增字段: ${addedProps.joinToString(", ")}")
+                                            if (removedProps.isNotEmpty()) parts.add("删除字段: ${removedProps.joinToString(", ")}")
+
+                                            // 同字段名 type 变化
+                                            for (propName in oldProps.intersect(newProps)) {
+                                                val oldProp = oldPropsObj.getAsJsonObject(propName)
+                                                val newProp = newPropsObj.getAsJsonObject(propName)
+                                                val oldType = oldProp?.get("type")?.asString ?: oldProp?.get("\$ref")?.asString ?: "unknown"
+                                                val newType = newProp?.get("type")?.asString ?: newProp?.get("\$ref")?.asString ?: "unknown"
+                                                if (oldType != newType) {
+                                                    parts.add("$propName 类型变更: $oldType -> $newType")
+                                                }
+                                            }
+                                        } else if (oldSchema.toString() != newSchema.toString()) {
+                                            parts.add("响应体结构变更")
+                                        }
+
+                                        if (parts.isNotEmpty()) {
+                                            responseDetails.add("$code ${parts.joinToString(", ")}")
+                                        }
+                                    }
+                                }
+                            }
+
+                            val detailStr = (paramDetails + responseDetails).joinToString("; ")
+                            val fullDesc = if (detailStr.isNotEmpty()) "$changeType ($detailStr)" else changeType
+                            changes["modified_paths"]?.add("${method.uppercase()} $path - $fullDesc - $summary")
                         }
                     }
                 }
@@ -152,7 +274,11 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
             println("swagger json file has not changed, skipping subsequent execution")
             // Record log
             FileWriter(logFile, true).use { writer ->
-                writer.write("[${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())}] swagger json file has not changed, MD5: $currentMd5\n")
+                val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())
+                writer.write("\n")
+                writer.write("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                writer.write("[$timestamp] swagger json file has not changed, MD5: $currentMd5\n")
+                writer.write("Summary: +0 added, -0 removed, ~0 modified\n")
             }
             return false
         } else {
@@ -178,7 +304,12 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
 
                 // Record to log
                 FileWriter(logFile, true).use { writer ->
-                    writer.write("[${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())}] First run, all APIs:\n")
+                    val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())
+                    val totalApis = allPaths.size
+                    writer.write("\n")
+                    writer.write("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+                    writer.write("[$timestamp] First run, all APIs:\n")
+                    writer.write("Summary: total $totalApis APIs registered as baseline\n")
                     allPaths.forEach { writer.write("  - $it\n") }
                 }
 
@@ -213,12 +344,32 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
                     downloadedFileObj.copyTo(File(oldFile), overwrite = true)
                 }
 
+                // Save historical version with timestamp
+                val timestampForFile = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+                val historyFile = "$historyDir/swagger_${timestampForFile}.json"
+                if (downloadedFileObj.exists()) {
+                    downloadedFileObj.copyTo(File(historyFile), overwrite = true)
+                    println("Historical swagger json saved to $historyFile")
+                }
+
                 // Record change information to log
                 FileWriter(logFile, true).use { writer ->
+                    val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())
+                    val totalAdded = changes["added_paths"]?.size ?: 0
+                    val totalRemoved = changes["removed_paths"]?.size ?: 0
+                    val totalModified = changes["modified_paths"]?.size ?: 0
+                    val hasChanges = totalAdded > 0 || totalRemoved > 0 || totalModified > 0
+
+                    writer.write("\n")
+                    writer.write("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
                     if (downloadSuccess) {
-                        writer.write("[${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())}] swagger json file updated, MD5: $currentMd5\n")
+                        writer.write("[$timestamp] swagger json file updated, MD5: $currentMd5\n")
                     } else {
-                        writer.write("[${SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(Date())}] swagger json file updated (local file), MD5: $currentMd5\n")
+                        writer.write("[$timestamp] swagger json file updated (local file), MD5: $currentMd5\n")
+                    }
+                    writer.write("Summary: +$totalAdded added, -$totalRemoved removed, ~$totalModified modified\n")
+                    if (!hasChanges) {
+                        writer.write("No API changes detected (MD5 changed but content diff is empty)\n")
                     }
 
                     changes["added_paths"]?.takeIf { it.isNotEmpty() }?.let {
@@ -233,12 +384,24 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
 
                     changes["modified_paths"]?.takeIf { it.isNotEmpty() }?.let {
                         writer.write("Modified APIs (parameter or response changes):\n")
-                        it.forEach { path -> writer.write("  - $path\n") }
+                        it.forEach { path ->
+                            // 标记破坏性变更
+                            val isBreaking = path.contains("删除参数") || path.contains("删除字段") ||
+                                    path.contains("删除响应码") || path.contains("类型变更") ||
+                                    path.contains("位置变更") || path.contains("必填变更: 可选 -> 必填")
+                            val markedPath = if (isBreaking) "  - [破坏性] $path" else "  - $path"
+                            writer.write("$markedPath\n")
+                        }
                     }
                 }
 
                 // Print change information
                 println("swagger json file has been updated, continuing with subsequent steps")
+                val totalAdded = changes["added_paths"]?.size ?: 0
+                val totalRemoved = changes["removed_paths"]?.size ?: 0
+                val totalModified = changes["modified_paths"]?.size ?: 0
+                println("Summary: +$totalAdded added, -$totalRemoved removed, ~$totalModified modified")
+
                 changes["added_paths"]?.takeIf { it.isNotEmpty() }?.let {
                     println("Added APIs:")
                     it.forEach { path -> println("  - $path") }
@@ -251,7 +414,12 @@ class SwaggerUpdater(private val config: Map<String, Any>) {
 
                 changes["modified_paths"]?.takeIf { it.isNotEmpty() }?.let {
                     println("Modified APIs (parameter or response changes):")
-                    it.forEach { path -> println("  - $path") }
+                    it.forEach { path ->
+                        val isBreaking = path.contains("删除参数") || path.contains("删除字段") ||
+                                path.contains("删除响应码") || path.contains("类型变更") ||
+                                path.contains("位置变更") || path.contains("必填变更: 可选 -> 必填")
+                        if (isBreaking) println("  - [破坏性] $path") else println("  - $path")
+                    }
                 }
             }
 
