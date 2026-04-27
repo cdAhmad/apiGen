@@ -11,7 +11,13 @@ import java.math.BigInteger
 import java.util.*
 import kotlin.collections.iterator
 
-class CleanSwaggerScript(private val salt: String, private val apiName: String = "Default", private val obfuscateOperationId: Boolean = true) {
+class CleanSwaggerScript(
+    private val salt: String,
+    private val apiName: String = "Default",
+    private val obfuscateOperationId: Boolean = true,
+    private val modelNameMap: Map<String, String> = emptyMap(),
+    private val exportModelMappingFile: String? = null
+) {
     fun generateFieldName(original: String): String {
         if (salt.isBlank()) {
             throw IllegalArgumentException("salt must not be blank")
@@ -51,7 +57,7 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
         return result.substring(0, 1).uppercase() + result.substring(1)
     }
 
-    fun cleanSwagger(inputFile: String, outputFile: String) {
+    fun cleanSwagger(inputFile: String, outputFile: String): Boolean {
 
         // 加载swagger文件
         val gson = Gson()
@@ -344,7 +350,8 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
             // 先创建映射关系
             for (entry in definitions.entrySet()) {
                 val modelName = entry.key
-                var hashedName = generateFieldName(modelName)
+                // 优先使用固定映射，否则按 salt 哈希生成混淆名
+                val hashedName = modelNameMap[modelName] ?: generateFieldName(modelName)
                 refMapping[modelName] = hashedName
                 newDefinitions.add(hashedName, entry.value)
             }
@@ -439,6 +446,39 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
             }
         }
 
+        // 导出 model 名称映射到文件，合并历史映射 + 本次新映射，支持增量
+        exportModelMappingFile?.takeIf { it.isNotBlank() }?.let { path ->
+            try {
+                val mergedMapping = LinkedHashMap<String, String>()
+                // 先写入历史映射（modelNameMap 中已存在的值）
+                for ((oldName, newName) in modelNameMap.toSortedMap()) {
+                    mergedMapping[oldName] = newName
+                }
+                // 再写入本次 swagger 中的映射（会覆盖同名 key，确保值一致）
+                for ((oldName, newName) in refMapping.toSortedMap()) {
+                    mergedMapping[oldName] = newName
+                }
+                val mappingJson = Gson().newBuilder().setPrettyPrinting().create().toJson(mergedMapping)
+                val mappingFile = File(path)
+                mappingFile.parentFile?.mkdirs()
+                mappingFile.writeText(mappingJson)
+                println("\nModel name mappings exported to $path (${mergedMapping.size} entries)")
+            } catch (e: Exception) {
+                println("\nFailed to export model name mappings: ${e.message}")
+            }
+        }
+
+        // 检查是否有新增 model：若存在历史映射且本次 swagger 出现新 model，中断等待用户确认
+        val newModels = refMapping.keys - modelNameMap.keys
+        if (newModels.isNotEmpty() && modelNameMap.isNotEmpty()) {
+            println("\n发现 ${newModels.size} 个新增 model，已写入映射文件。请检查以下映射确认后重新运行：")
+            for (model in newModels.toSortedSet()) {
+                println("  $model -> ${refMapping[model]}")
+            }
+            println("\n若接受上述映射，直接重新运行即可；如需修改，请编辑映射文件后重新运行。")
+            return false
+        }
+
         // 保存清洗后的swagger文件
         try {
             val gsonBuilder = Gson().newBuilder().setPrettyPrinting()
@@ -448,6 +488,7 @@ class CleanSwaggerScript(private val salt: String, private val apiName: String =
         } catch (e: Exception) {
             println("\nFailed to save file: ${e.message}")
         }
+        return true
     }
 
     private fun JsonObject.asMap(): Map<String, Any> {

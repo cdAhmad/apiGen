@@ -63,7 +63,10 @@ repositories {
 | --salt | 混淆盐值（用于模型名与操作 ID 的哈希混淆） | 无 | **是** |
 | --apiName | API 名称（用于统一设置所有接口的 tag） | Default | 否 |
 | --obfuscateOperationId | 是否混淆操作 ID 与模型名称 | true | 否 |
-| --apiGenDir | API Gen 工作目录 | .api_gen | 否 |
+| --apiGenDir | API Gen 工作目录 | api_gen | 否 |
+| --disableModelMapping | 禁用 model 名称映射功能（不加载、不导出、不检查增量），回到旧版本直接生成行为 | false | 否 |
+| --modelNameMap | 固定 model 名称映射文件（JSON：原名 → 混淆名）；命中映射时跳过哈希生成。未指定时自动加载默认路径 `{apiGenDir}/model_name_mapping.json`（若存在）作为增量基础 | 无 | 否 |
+| --exportModelNameMap | 导出本次 model 名称映射到 JSON 文件；导出时自动合并历史映射 + 本次新映射，支持增量 | {apiGenDir}/model_name_mapping.json | 否 |
 
 ## Gradle 集成
 
@@ -78,7 +81,7 @@ dependencies {
     apiGenConfigurable("com.github.cdAhmad:apigen:+")
     
     // 生产环境建议锁定具体版本号，例如：
-    // apiGenConfigurable("com.github.cdAhmad:apigen:1.1.0")
+    // apiGenConfigurable("com.github.cdAhmad:apigen:1.2.0")
 }
 
 // 3. 创建生成任务
@@ -98,11 +101,25 @@ tasks.register<JavaExec>("generateSwaggerApi") {
         "--salt", "your-random-salt-value-here", // 请替换为随机值
         "--apiName", "Default",
         "--obfuscateOperationId", "false",
-        "--apiGenDir", "build/api_gen"
+        "--apiGenDir", "api_gen", // apiGen 目录（默认在 outputDir 下）
+        // "--disableModelMapping", "true", // 禁用 model 映射增量保护（可选）
+        // "--modelNameMap", "model_name_mapping.json", // 指定固定映射文件（可选）
+        // "--exportModelNameMap", "build/api_gen/model_name_mapping.json" // 指定导出映射路径（可选）
     )
     workingDir = projectDir
 }
 ```
+
+### Model 名称映射（增量保护）
+
+工具默认会在 `{apiGenDir}/model_name_mapping.json` 中记录原始 model 名称与混淆名的映射关系：
+
+- **第一次运行**：自动生成映射文件，直接完成代码生成。
+- **后续运行**：
+  - 若 swagger 无新增 model → 直接生成。
+  - 若 swagger **新增 model** → 导出新的映射文件后**中断**，提示你确认新增的 model 映射值。检查无误后直接重新运行即可。
+
+该机制确保 model 名称在跨版本迭代中保持稳定。如需关闭此功能，添加 `--disableModelMapping true` 即可回到旧版本行为。
 
 ## 生成代码结构
 
@@ -123,6 +140,8 @@ tasks.register<JavaExec>("generateSwaggerApi") {
 - 可自定义响应基类
 - 支持操作 ID 混淆
 - 加密盐值增强安全性
+- model 名称混淆映射，支持增量保护（跨版本保持 model 名一致）
+- 支持固定 model 名称映射（JSON 文件）
 
 ## 常见问题排查
 

@@ -1,5 +1,7 @@
 package com.cdahmod.api_gen
 
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import org.openapitools.codegen.OpenAPIGenerator
 import java.io.File
 
@@ -33,7 +35,18 @@ fun main(args: Array<String>) {
     val baseResponseName = params.getOrDefault("baseResponseName", "BaseResponse")
     val apiName = params.getOrDefault("apiName", "Default")
     val obfuscateOperationId = params.getOrDefault("obfuscateOperationId", "true").toBoolean()
-    val apiGenDir = params.getOrDefault("apiGenDir", ".api_gen")
+    val apiGenDir = params.getOrDefault("apiGenDir", if (outputDir.isNotBlank()) "$outputDir/api_gen" else "api_gen")
+    // 是否禁用 model 名称映射功能（回到旧版本直接生成行为）
+    val disableModelMapping = params.getOrDefault("disableModelMapping", "false").toBoolean()
+    // 固定 model 名称映射文件（JSON：原名 -> 混淆名），命中映射时跳过哈希生成
+    val modelNameMapFile = params["modelNameMap"]?.takeIf { it.isNotBlank() }
+    // 导出本次生成的 model 名称映射到指定 JSON 文件，便于下次复用；默认放在 apiGenDir 根目录
+    val exportModelNameMap = if (disableModelMapping) {
+        null
+    } else {
+        params["exportModelNameMap"]?.takeIf { it.isNotBlank() }
+            ?: "$apiGenDir/model_name_mapping.json"
+    }
     
     // salt 为必传参数，为其添加前缀
     val saltInput = params["salt"]
@@ -55,6 +68,9 @@ fun main(args: Array<String>) {
     println("apiName: $apiName")
     println("obfuscateOperationId: $obfuscateOperationId")
     println("apiGenDir: $apiGenDir")
+    println("disableModelMapping: $disableModelMapping")
+    println("modelNameMap: ${modelNameMapFile ?: "<none>"}")
+    println("exportModelNameMap: ${exportModelNameMap ?: "<disabled>"}")
 
     // 检查 swaggerApiUrl 是否有效
     if (swaggerApiUrl.isBlank()) {
@@ -75,9 +91,44 @@ fun main(args: Array<String>) {
 
     // Run clean_swagger_script
     println("\nRunning clean_swagger_script...")
-    val cleanSwaggerScript = CleanSwaggerScript(salt, apiName, obfuscateOperationId)
+    // 支持增量：如果用户未显式传 modelNameMap，自动加载默认路径的历史映射文件
+    val resolvedModelNameMapFile = if (disableModelMapping) {
+        null
+    } else {
+        modelNameMapFile
+            ?: "$apiGenDir/model_name_mapping.json".let { if (File(it).exists()) it else null }
+    }
+    val modelNameMap: Map<String, String> = resolvedModelNameMapFile?.let { path ->
+        val file = File(path)
+        if (!file.exists()) {
+            println("Warning: modelNameMap file not found: $path, skipping fixed mapping")
+            null
+        } else {
+            try {
+                val jsonObj = Gson().fromJson(file.readText(), JsonObject::class.java)
+                val map = jsonObj.entrySet().associate { it.key to it.value.asString }
+                val sourceDesc = if (path == modelNameMapFile) "fixed" else "incremental"
+                println("Loaded ${map.size} $sourceDesc model name mappings from $path")
+                map
+            } catch (e: Exception) {
+                println("Warning: failed to parse modelNameMap file $path: ${e.message}")
+                null
+            }
+        }
+    } ?: emptyMap()
+    val cleanSwaggerScript = CleanSwaggerScript(
+        salt,
+        apiName,
+        obfuscateOperationId,
+        modelNameMap,
+        exportModelNameMap
+    )
     try {
-        cleanSwaggerScript.cleanSwagger("$apiGenDir/logs/default_OpenAPI.json", "$apiGenDir/logs/temp.json")
+        val canContinue = cleanSwaggerScript.cleanSwagger("$apiGenDir/logs/default_OpenAPI.json", "$apiGenDir/logs/temp.json")
+        if (!canContinue) {
+            println("clean_swagger_script interrupted: new model mappings need confirmation")
+            return
+        }
         println("clean_swagger_script executed successfully")
     } catch (e: Exception) {
         println("clean_swagger_script execution failed: ${e.message}")
