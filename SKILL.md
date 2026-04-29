@@ -67,6 +67,8 @@ repositories {
 | --disableModelMapping | 禁用 model 名称映射功能（不加载、不导出、不检查增量），回到旧版本直接生成行为 | false | 否 |
 | --modelNameMap | 固定 model 名称映射文件（JSON：原名 → 混淆名）；命中映射时跳过哈希生成。未指定时自动加载默认路径 `{apiGenDir}/model_name_mapping.json`（若存在）作为增量基础 | 无 | 否 |
 | --exportModelNameMap | 导出本次 model 名称映射到 JSON 文件；导出时自动合并历史映射 + 本次新映射，支持增量 | {apiGenDir}/model_name_mapping.json | 否 |
+| --library | HTTP 客户端库类型。可选值：`jvm-ktor`（Ktor 1.6.7）、`jvm-okhttp4`（OkHttp 4.2.0）、`jvm-spring-webclient`、`jvm-spring-restclient`、`jvm-retrofit2`（默认）、`multiplatform`（Kotlin Multiplatform）、`jvm-volley`、`jvm-vertx` | jvm-retrofit2 | 否 |
+| --useRxjava | 是否使用 RxJava3 作为异步方案；为 `false` 时启用 Kotlin Coroutines | true | 否 |
 
 ## Gradle 集成
 
@@ -81,7 +83,7 @@ dependencies {
     apiGenConfigurable("com.github.cdAhmad:apigen:+")
     
     // 生产环境建议锁定具体版本号，例如：
-    // apiGenConfigurable("com.github.cdAhmad:apigen:1.2.0")
+    // apiGenConfigurable("com.github.cdAhmad:apigen:1.2.1")
 }
 
 // 3. 创建生成任务
@@ -104,7 +106,9 @@ tasks.register<JavaExec>("generateSwaggerApi") {
         "--apiGenDir", "api_gen", // apiGen 目录（默认在 outputDir 下）
         // "--disableModelMapping", "true", // 禁用 model 映射增量保护（可选）
         // "--modelNameMap", "model_name_mapping.json", // 指定固定映射文件（可选）
-        // "--exportModelNameMap", "build/api_gen/model_name_mapping.json" // 指定导出映射路径（可选）
+        // "--exportModelNameMap", "build/api_gen/model_name_mapping.json", // 指定导出映射路径（可选）
+        // "--library", "jvm-retrofit2", // HTTP 客户端库（可选，默认 jvm-retrofit2）
+        // "--useRxjava", "false" // 使用协程替代 RxJava3（可选，默认 true）
     )
     workingDir = projectDir
 }
@@ -135,7 +139,8 @@ tasks.register<JavaExec>("generateSwaggerApi") {
 ## 功能特性
 
 - 从 Swagger/OpenAPI 规范生成 Kotlin 代码
-- 支持 Retrofit 2 与协程
+- 支持多种 HTTP 客户端库：Retrofit 2、OkHttp 4、Ktor、Spring WebClient/RestClient、Vert.x、Volley 等
+- 支持 RxJava3 与 Kotlin Coroutines 两种异步方案
 - 使用 kotlinx.serialization 处理 JSON
 - 可自定义响应基类
 - 支持操作 ID 混淆
@@ -151,7 +156,7 @@ tasks.register<JavaExec>("generateSwaggerApi") {
 
 ## 注意事项
 
-- 生成的代码使用 Retrofit 2 协程和 kotlinx.serialization
+- 生成的代码使用所选 HTTP 客户端库（默认 Retrofit 2）和 kotlinx.serialization
 - 请确保项目中已添加必要的依赖
 - 响应基类将自动以指定名称创建
 - **重要**：请勿将 api-gen 作为 `implementation` 依赖添加。它仅用于代码生成，不应包含在最终发布包中。请按照上述 Gradle 集成示例使用 `apiGenConfigurable` 之类的自定义配置，确保它仅在构建过程中使用。

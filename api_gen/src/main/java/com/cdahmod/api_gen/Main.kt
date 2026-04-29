@@ -35,7 +35,26 @@ fun main(args: Array<String>) {
     val baseResponseName = params.getOrDefault("baseResponseName", "BaseResponse")
     val apiName = params.getOrDefault("apiName", "Default")
     val obfuscateOperationId = params.getOrDefault("obfuscateOperationId", "true").toBoolean()
-    val apiGenDir = params.getOrDefault("apiGenDir", if (outputDir.isNotBlank()) "$outputDir/api_gen" else "api_gen")
+    val library = params.getOrDefault("library", "jvm-retrofit2")
+    val supportedLibraries = setOf(
+        "jvm-ktor",
+        "jvm-okhttp4",
+        "jvm-spring-webclient",
+        "jvm-spring-restclient",
+        "jvm-retrofit2",
+        "multiplatform",
+        "jvm-volley",
+        "jvm-vertx"
+    )
+    if (library !in supportedLibraries) {
+        println("Error: unsupported library '$library'. Supported values: ${supportedLibraries.joinToString(", ")}")
+        return
+    }
+    val useRxjava = params.getOrDefault("useRxjava", "true").toBoolean()
+    val apiGenDir = params.getOrDefault(
+        "apiGenDir",
+        if (outputDir.isNotBlank()) "$outputDir/api_gen" else "api_gen"
+    )
     // 是否禁用 model 名称映射功能（回到旧版本直接生成行为）
     val disableModelMapping = params.getOrDefault("disableModelMapping", "false").toBoolean()
     // 固定 model 名称映射文件（JSON：原名 -> 混淆名），命中映射时跳过哈希生成
@@ -47,7 +66,7 @@ fun main(args: Array<String>) {
         params["exportModelNameMap"]?.takeIf { it.isNotBlank() }
             ?: "$apiGenDir/model_name_mapping.json"
     }
-    
+
     // salt 为必传参数，为其添加前缀
     val saltInput = params["salt"]
     if (saltInput.isNullOrBlank()) {
@@ -71,6 +90,8 @@ fun main(args: Array<String>) {
     println("disableModelMapping: $disableModelMapping")
     println("modelNameMap: ${modelNameMapFile ?: "<none>"}")
     println("exportModelNameMap: ${exportModelNameMap ?: "<disabled>"}")
+    println("library: $library")
+    println("useRxjava: $useRxjava")
 
     // 检查 swaggerApiUrl 是否有效
     if (swaggerApiUrl.isBlank()) {
@@ -124,7 +145,10 @@ fun main(args: Array<String>) {
         exportModelNameMap
     )
     try {
-        val canContinue = cleanSwaggerScript.cleanSwagger("$apiGenDir/logs/default_OpenAPI.json", "$apiGenDir/logs/temp.json")
+        val canContinue = cleanSwaggerScript.cleanSwagger(
+            "$apiGenDir/logs/default_OpenAPI.json",
+            "$apiGenDir/logs/temp.json"
+        )
         if (!canContinue) {
             println("clean_swagger_script interrupted: new model mappings need confirmation")
             return
@@ -197,7 +221,7 @@ fun main(args: Array<String>) {
             "--global-property",
             "apis,models,modelDocs,modelTests=false,apiTests=false",
             "--additional-properties",
-            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=true,library=jvm-retrofit2,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
+            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=${useRxjava.not()},useRxJava3=${useRxjava},library=$library,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
         )
         println("Execution parameters: ${args.joinToString(" ")}")
         OpenAPIGenerator.main(args)
