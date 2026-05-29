@@ -221,7 +221,7 @@ fun main(args: Array<String>) {
             "--global-property",
             "apis,models,modelDocs,modelTests=false,apiTests=false",
             "--additional-properties",
-            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string,useCoroutines=${useRxjava.not()},useRxJava3=${useRxjava},library=$library,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
+            "generateApiTests=false,generateModelTests=false,performBeanValidation=false,useResponseAsReturnType=false,serializableModel=true,nullableReturnType=true,dateLibrary=string${if (useRxjava) ",useRxJava3=true" else ",useCoroutines=true"},library=$library,generateAliasAsModel=true,serializationLibrary=kotlinx_serialization,interfaceOnly=false,apiPackage=$apiPackage,modelPackage=$modelPackage,sourceFolder=$sourceFolder"
         )
         println("Execution parameters: ${args.joinToString(" ")}")
         OpenAPIGenerator.main(args)
