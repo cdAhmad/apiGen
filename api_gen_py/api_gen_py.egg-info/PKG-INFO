@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: api_gen_py
+Version: 1.0.0
+Summary: 将 Swagger API 文档转换为 Kotlin 代码（flow + retrofit）
+Author: cdAhmad
+License: MIT
+Requires-Python: >=3.10
