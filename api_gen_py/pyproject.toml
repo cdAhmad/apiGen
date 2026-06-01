@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "api_gen_py"
+version = "1.0.0"
+description = "将 Swagger API 文档转换为 Kotlin 代码（flow + retrofit）"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "cdAhmad"}]
+dependencies = []
+
+[project.scripts]
+api-gen-py = "api_gen_py.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
