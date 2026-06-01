@@ -10,7 +10,19 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 ## Agent 执行流程
 
 1. **确认必填参数**：`--swaggerApiUrl`（Swagger JSON URL 或本地文件路径）和 `--salt`（缺失则询问用户）
-2. **确认可选参数**：输出目录、包名，默认值通常可用
+2. **询问可选参数**：逐项确认以下配置，用户无特殊要求则使用默认值——
+   - `--outputDir`：输出目录（默认 `generated-code`）
+   - `--package`：根包名（默认 `com.example.api`）
+   - `--modelPackage`：模型包名（默认 `{package}.bean`）
+   - `--apiPackage`：API 包名（默认 `{package}.api`）
+   - `--splitByTag`：按 tag 拆分接口（默认 `false`）
+   - `--exportMappingOnly`：仅导出映射不生成代码（默认 `false`）
+   - `--modelNameMap`：固定映射 JSON 文件路径（增量用）
+   - `--disableModelMapping`：禁用模型名混淆（默认 `false`）
+   - `--baseResponseName`：响应包装类名（默认 `BaseResponse`）
+   - `--obfuscateOperationId`：混淆 operationId（默认 `true`）
+   - `--apiName`：API 接口名称（默认 `Default`）
+   - `--library`：HTTP 客户端库（默认 `jvm-retrofit2`）
 3. **进入 skill 目录**：`cd api_gen_py`
 4. **运行生成**：`python3 scripts/main.py ...`
 5. **报告结果**：文件数量、API 方法数、公共 header 数
