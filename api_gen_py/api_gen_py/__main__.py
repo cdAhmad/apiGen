@@ -32,6 +32,46 @@ def main():
     print(f"  library: {args.library}")
     print()
 
+    # 0. 记录执行命令 → 避免 salt 丢失导致无法重建
+    cmd_file = os.path.join(args.api_gen_dir, "generate.sh")
+    os.makedirs(args.api_gen_dir, exist_ok=True)
+    saved_args = sys.argv[1:]
+    now = __import__('datetime').datetime.now()
+    # 将 --key value 配对到同一行
+    formatted_args = []
+    i = 0
+    while i < len(saved_args):
+        a = saved_args[i]
+        if a.startswith("--") and i + 1 < len(saved_args) and not saved_args[i + 1].startswith("--"):
+            formatted_args.append(f"{a} {saved_args[i + 1]}")
+            i += 2
+        else:
+            formatted_args.append(a)
+            i += 1
+    with open(cmd_file, "w", encoding="utf-8") as f:
+        f.write("#!/bin/bash\n")
+        f.write(f"# 最后一次生成命令 (含 salt，请勿丢失此文件)\n")
+        f.write(f"# 生成时间: {now:%Y-%m-%d %H:%M:%S}\n")
+        f.write(f"# Swagger:  {args.swaggerApiUrl}\n")
+        f.write(f"# Salt:     {args.salt}\n")
+        f.write("cd \"$(dirname \"$0\")/..\"\n")
+        f.write("python3 -m api_gen_py")
+        if formatted_args:
+            f.write(" \\\n")
+            for i, a in enumerate(formatted_args):
+                suffix = " \\\n" if i < len(formatted_args) - 1 else "\n"
+                f.write(f"  {a}{suffix}")
+        else:
+            f.write("\n")
+    os.chmod(cmd_file, 0o755)
+    print(f"Command saved to {cmd_file}")
+
+    # 记录 salt 到更新日志
+    log_file = os.path.join(args.api_gen_dir, "swagger_update.log")
+    os.makedirs(os.path.dirname(log_file) or args.api_gen_dir, exist_ok=True)
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(f"[{now:%Y-%m-%d %H:%M:%S}] salt: {args.salt}\n")
+
     # 1. 下载 Swagger JSON
     updater = SwaggerUpdater(args.swaggerApiUrl, args.api_gen_dir)
     if not updater.run():

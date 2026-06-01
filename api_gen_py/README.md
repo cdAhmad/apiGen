@@ -61,18 +61,19 @@ generated-code/
 │       └── DefaultApi.kt            ← Retrofit2 接口 (suspend)
 │
 └── api_gen/                          ← 缓存目录（自动管理）
+    ├── generate.sh                   ← 完整执行命令（含 salt，可直接 ./generate.sh 重建）
+    ├── model_name_mapping.json       ← 模型名映射（纳入版本控制，增量复用）
+    ├── swagger_update.log            ← 全量变更日志（首行记录 salt）
     ├── logs/
     │   ├── default_OpenAPI.json      ← 当前 Swagger 快照
     │   ├── swagger_old.json          ← 上次 Swagger（用于 diff）
     │   ├── swagger_md5.txt           ← MD5 去重缓存
-    │   ├── changelog_*.md            ← 每次变更的独立报告
+    │   ├── changelog_<ts>.md         ← 每次变更的独立报告
     │   ├── common_headers.json       ← 公共 header 列表
     │   └── temp.json                 ← 清洗后的临时文件
-    ├── history/
-    │   ├── swagger_<ts>.json         ← 历史 Swagger 快照
-    │   └── code_<ts>/                ← 变更前生成代码的完整备份
-    ├── model_name_mapping.json       ← 模型名映射（可增量复用）
-    └── swagger_update.log            ← 全量变更日志
+    └── history/
+        ├── swagger_<ts>.json         ← 历史 Swagger 快照
+        └── code_<ts>/                ← 变更前生成代码的完整备份
 ```
 
 ### BaseResponse.kt
@@ -187,6 +188,16 @@ interface SzSniwIVvjxntnywiK {
 
 // ... 9 个 interface 对应 9 个 tag
 ```
+
+## salt 保存
+
+每次运行自动在 `api_gen/generate.sh` 保存完整执行命令（含 salt），可直接重新运行：
+
+```bash
+./api_gen/generate.sh
+```
+
+`salt` 同时记录在 `swagger_update.log` 首行。确保团队成员使用相同 salt，否则混淆名会不一致。
 
 ## Swagger 变更检测
 
