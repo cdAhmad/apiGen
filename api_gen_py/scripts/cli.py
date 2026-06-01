@@ -28,7 +28,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--sourceFolder", dest="source_folder", default=None,
                         help="源码子目录 (默认: src/main/kotlin)")
     parser.add_argument("--swaggerApiUrl", default="",
-                        help="Swagger JSON URL (必填)")
+                        help="Swagger JSON URL 或本地文件路径 (必填)")
     parser.add_argument("--baseResponseName", dest="base_response_name",
                         default="BaseResponse",
                         help="响应基类名称 (默认: BaseResponse)")

@@ -275,9 +275,23 @@ class SwaggerUpdater:
 
         return changes
 
+    def _load_local_file(self) -> bool:
+        """将本地 swagger JSON 文件复制到 downloaded_file 位置"""
+        print(f"Loading swagger json from local file: {self.swagger_api_url}")
+        try:
+            shutil.copy(self.swagger_api_url, self.downloaded_file)
+            print(f"Loaded, saved to {self.downloaded_file}")
+            return True
+        except Exception as e:
+            print(f"Failed to load local file: {e}")
+            return False
+
     def run(self) -> bool:
-        # 下载
-        if self.swagger_api_url:
+        # 下载 / 加载本地文件
+        if os.path.isfile(self.swagger_api_url):
+            if not self._load_local_file():
+                return False
+        elif self.swagger_api_url:
             if not self.download_swagger_json():
                 return False
         else:

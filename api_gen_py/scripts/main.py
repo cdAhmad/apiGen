@@ -1,13 +1,14 @@
-"""api_gen_py 主入口 — python -m api_gen_py"""
+#!/usr/bin/env python3
+"""api_gen_py — Swagger API 文档转 Kotlin 代码（suspend + Retrofit2 + kotlinx.serialization）"""
 
 import json
 import os
 import sys
 
-from .cli import parse_args
-from .swagger_updater import SwaggerUpdater
-from .clean_swagger import CleanSwaggerScript
-from .generator import generate
+from cli import parse_args
+from swagger_updater import SwaggerUpdater
+from clean_swagger import CleanSwaggerScript
+from generator import generate
 
 
 def main():
@@ -35,6 +36,7 @@ def main():
     # 0. 记录执行命令 → 避免 salt 丢失导致无法重建
     cmd_file = os.path.join(args.api_gen_dir, "generate.sh")
     os.makedirs(args.api_gen_dir, exist_ok=True)
+    script_path = os.path.abspath(__file__)
     saved_args = sys.argv[1:]
     now = __import__('datetime').datetime.now()
     # 将 --key value 配对到同一行
@@ -55,7 +57,7 @@ def main():
         f.write(f"# Swagger:  {args.swaggerApiUrl}\n")
         f.write(f"# Salt:     {args.salt}\n")
         f.write("cd \"$(dirname \"$0\")/..\"\n")
-        f.write("python3 -m api_gen_py")
+        f.write(f"python3 {script_path}")
         if formatted_args:
             f.write(" \\\n")
             for i, a in enumerate(formatted_args):

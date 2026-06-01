@@ -1,6 +1,6 @@
 ---
 name: api-gen-py
-description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retrofit2 + kotlinx.serialization）。纯 Python 实现。触发：(1) 从 Swagger URL 生成 Kotlin API 客户端，(2) 接口变更后重新生成，(3) 模型名映射审核与增量更新，(4) 按 tag 拆分接口。
+description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retrofit2 + kotlinx.serialization）。纯 Python 实现。触发：(1) 从 Swagger URL 或本地 JSON 文件生成 Kotlin API 客户端，(2) 接口变更后重新生成，(3) 模型名映射审核与增量更新，(4) 按 tag 拆分接口。
 ---
 
 # api_gen_py
@@ -9,16 +9,17 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 
 ## Agent 执行流程
 
-1. **确认必填参数**：`--swaggerApiUrl` 和 `--salt`（缺失则询问用户）
+1. **确认必填参数**：`--swaggerApiUrl`（Swagger JSON URL 或本地文件路径）和 `--salt`（缺失则询问用户）
 2. **确认可选参数**：输出目录、包名，默认值通常可用
-3. **运行生成**：`python3 -m api_gen_py ...`
-4. **报告结果**：文件数量、API 方法数、公共 header 数
+3. **进入 skill 目录**：`cd api_gen_py`
+4. **运行生成**：`python3 scripts/main.py ...`
+5. **报告结果**：文件数量、API 方法数、公共 header 数
 
 ## 命令行参考
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--swaggerApiUrl` | **(必填)** | Swagger JSON URL |
+| `--swaggerApiUrl` | **(必填)** | Swagger JSON URL 或本地文件路径 |
 | `--salt` | **(必填)** | 混淆盐值（选定后不可更换） |
 | `--outputDir` | `generated-code` | 输出目录 |
 | `--package` | `com.example.api` | 根包名 |
@@ -33,10 +34,18 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 
 ## 典型场景
 
-### 首次生成
+### 首次生成（URL）
 ```bash
-python3 -m api_gen_py \
+python3 scripts/main.py \
   --swaggerApiUrl "https://xxx/v2/api-docs" \
+  --salt "project-unique-salt" \
+  --outputDir "./api"
+```
+
+### 首次生成（本地文件）
+```bash
+python3 scripts/main.py \
+  --swaggerApiUrl "./swagger.json" \
   --salt "project-unique-salt" \
   --outputDir "./api"
 ```
@@ -44,16 +53,16 @@ python3 -m api_gen_py \
 ### 审核模型名后生成
 ```bash
 # step 1: 导出映射
-python3 -m api_gen_py ... --exportMappingOnly true
+python3 scripts/main.py ... --exportMappingOnly true
 # → 编辑 {outputDir}/api_gen/model_name_mapping.json
 
 # step 2: 用固定映射生成
-python3 -m api_gen_py ... --modelNameMap "./api/api_gen/model_name_mapping.json"
+python3 scripts/main.py ... --modelNameMap "./api/api_gen/model_name_mapping.json"
 ```
 
 ### 按业务模块拆分
 ```bash
-python3 -m api_gen_py ... --splitByTag true
+python3 scripts/main.py ... --splitByTag true
 ```
 
 ## 生成产物
@@ -98,4 +107,4 @@ python3 -m api_gen_py ... --splitByTag true
 
 - **salt 一旦确定不可更换**，否则所有混淆名变化，现有引用全部失效
 - `model_name_mapping.json` 和 `generate.sh` 应纳入版本控制
-- 需要 Python 3.10+，无需安装任何第三方库
+- 需要 Python 3.10+，无需 pip install，直接运行脚本即可

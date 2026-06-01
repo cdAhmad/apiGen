@@ -1,2 +1,0 @@
-[console_scripts]
-api-gen-py = api_gen_py.__main__:main

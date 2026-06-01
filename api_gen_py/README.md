@@ -6,25 +6,26 @@
 
 ## 安装
 
-```bash
-cd api_gen_py
-pip install -e .
-```
-
-安装后可用 `api-gen-py` 命令，或直接用 Python 运行：
-
-```bash
-python3 -m api_gen_py --swaggerApiUrl <URL> --salt <SALT>
-```
+无需安装，直接运行脚本。零外部依赖，仅需 Python 3.10+。
 
 ## 快速开始
 
 ```bash
-python3 -m api_gen_py \
+cd api_gen_py
+python3 scripts/main.py \
   --swaggerApiUrl "https://your-server.com/v2/api-docs" \
   --salt "my-salt-123" \
   --outputDir "./generated-code" \
   --package "com.example.api"
+```
+
+也支持本地 Swagger JSON 文件：
+
+```bash
+python3 scripts/main.py \
+  --swaggerApiUrl "./swagger.json" \
+  --salt "my-salt-123" \
+  --outputDir "./generated-code"
 ```
 
 ## 参数说明
@@ -166,7 +167,7 @@ object ApiHeaders {
 ### --splitByTag 拆分
 
 ```bash
-python3 -m api_gen_py ... --splitByTag true
+python3 scripts/main.py ... --splitByTag true
 ```
 
 按 Swagger 原始 tag 拆分为多个接口：
@@ -237,11 +238,11 @@ Modified APIs:
 
 ```bash
 # 步骤 1：审核映射
-python3 -m api_gen_py ... --exportMappingOnly true
+python3 scripts/main.py ... --exportMappingOnly true
 # → 编辑 model_name_mapping.json，修改不满意的映射名
 
 # 步骤 2：用审核后的映射生成
-python3 -m api_gen_py ... --modelNameMap "./api_gen/model_name_mapping.json"
+python3 scripts/main.py ... --modelNameMap "./api_gen/model_name_mapping.json"
 ```
 
 如果 Swagger 新增了模型，工具会提示：
