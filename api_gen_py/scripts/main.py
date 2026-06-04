@@ -30,7 +30,6 @@ def main():
     print(f"  disableModelMapping: {args.disable_model_mapping}")
     print(f"  modelNameMap: {args.model_name_map or '<none>'}")
     print(f"  exportModelNameMap: {args.export_model_name_map or '<disabled>'}")
-    print(f"  library: {args.library}")
     print()
 
     # 0. 准备工作
@@ -171,12 +170,12 @@ def main():
             model_package=args.model_package,
             api_package=args.api_package,
             base_response_name=args.base_response_name,
-            library=args.library,
             common_headers=clean.common_headers,
             model_name_mapping=full_mapping,
             split_by_tag=args.split_by_tag,
             tag_info=clean.tag_info if args.split_by_tag else None,
             source_folder=args.source_folder,
+            api_name=args.apiName,
         )
     except Exception as e:
         print(f"Code generation failed: {e}")

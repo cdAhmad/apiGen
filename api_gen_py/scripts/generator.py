@@ -125,7 +125,8 @@ def _gen_model(pkg: str, def_name: str, definition: dict, definitions: dict,
 def _gen_api(swagger: dict, pkg: str, model_pkg: str,
              base_response_name: str,
              common_headers: list[dict] | None = None,
-             split_by_tag: bool = False, tag_info: dict | None = None
+             split_by_tag: bool = False, tag_info: dict | None = None,
+             api_name: str = "ApiService"
              ) -> tuple[str, dict[str, list[str]]]:
     """生成 Retrofit2 API，返回 (代码, 模型使用映射)"""
     paths = swagger.get("paths", {})
@@ -350,7 +351,7 @@ def _gen_api(swagger: dict, pkg: str, model_pkg: str,
             lines.append("}")
             lines.append("")
     else:
-        lines.append("interface DefaultApi {")
+        lines.append(f"interface {api_name} {{")
         lines.append("")
         lines.extend(_build_methods(all_methods))
         lines.append("}")
@@ -363,11 +364,12 @@ def _gen_api(swagger: dict, pkg: str, model_pkg: str,
 
 def generate(input_file: str, output_dir: str, package_name: str,
              model_package: str, api_package: str,
-             base_response_name: str, library: str,
+             base_response_name: str,
              common_headers: list[dict] | None = None,
              model_name_mapping: dict[str, str] | None = None,
              split_by_tag: bool = False, tag_info: dict | None = None,
-             source_folder: str = "src/main/kotlin"):
+             source_folder: str = "src/main/kotlin",
+             api_name: str = "ApiService"):
     """从清洗后的 Swagger JSON 生成 Kotlin 项目"""
     with open(input_file, encoding="utf-8") as f:
         swagger = json.load(f)
@@ -388,10 +390,11 @@ def generate(input_file: str, output_dir: str, package_name: str,
     # API → 收集模型使用信息
     api_code, model_usage = _gen_api(swagger, api_package, model_package,
                                      base_response_name, common_headers,
-                                     split_by_tag, tag_info)
-    with open(os.path.join(api_path, "DefaultApi.kt"), "w", encoding="utf-8") as f:
+                                     split_by_tag, tag_info, api_name)
+    api_filename = f"{api_name}.kt"
+    with open(os.path.join(api_path, api_filename), "w", encoding="utf-8") as f:
         f.write(api_code)
-    print(f"Generated {api_path}/DefaultApi.kt")
+    print(f"Generated {api_path}/{api_filename}")
 
     # 反向映射: obfuscated → original
     rev_mapping = {}

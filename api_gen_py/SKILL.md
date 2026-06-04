@@ -9,7 +9,7 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 
 ## Agent 执行流程
 
-1. **确认必填参数**：询问 `--swaggerApiUrl` 和 `--salt`。salt 建议用项目名（如 `myapp`），一旦确定不可更换。缺失则询问用户。
+1. **确认必填参数**：询问 `--swaggerApiUrl`、`--salt` 和 `--package`。salt 建议用项目名（如 `myapp`），package 用项目根包名（如 `com.myapp.api`）。缺失则询问用户。
 2. **可选参数**：全部使用默认值。仅在用户明确指定时才覆盖（如"包名用 com.xxx"、"按模块拆分"等），无需逐项询问。
 3. **进入 skill 目录**：`cd api_gen_py`
 4. **运行生成**：`python3 scripts/main.py ...`
@@ -21,9 +21,9 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 |------|--------|------|
 | `--swaggerApiUrl` | **(必填)** | Swagger JSON URL 或本地文件路径 |
 | `--salt` | **(必填)** | 混淆盐值（选定后不可更换） |
-| `--outputDir` | `generated-code` | 输出目录 |
-| `--package` | `com.example.api` | 根包名 |
-| `--modelPackage` | `{package}.bean` | 模型包名 |
+| `--outputDir` | `app` | 输出目录 |
+| `--package` | **(必填)** | 根包名（如 `com.myapp.api`） |
+| `--modelPackage` | `{package}.model` | 模型包名 |
 | `--apiPackage` | `{package}.api` | API 包名 |
 | `--sourceFolder` | `src/main/kotlin` | 源码子目录 |
 | `--splitByTag` | `false` | 按 tag 拆分多接口 |
@@ -33,8 +33,7 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 | `--disableModelMapping` | `false` | 禁用模型名混淆 |
 | `--baseResponseName` | `BaseResponse` | 响应包装类名 |
 | `--obfuscateOperationId` | `true` | 混淆 operationId |
-| `--apiName` | `Default` | API 接口名称 |
-| `--library` | `jvm-retrofit2` | HTTP 客户端库 |
+| `--apiName` | `ApiService` | 接口名称（`--splitByTag false` 时生效） |
 | `--apiGenDir` | `<outputDir>/api_gen` | apiGen 工作目录 |
 
 ## 典型场景
@@ -46,12 +45,11 @@ python3 scripts/main.py \
   --salt "project-unique-salt" \
   --outputDir "./api" \
   --package "com.example.api" \
-  --modelPackage "com.example.api.bean" \
+  --modelPackage "com.example.api.model" \
   --apiPackage "com.example.api.api" \
   --sourceFolder "src/main/kotlin" \
   --baseResponseName "BaseResponse" \
-  --apiName "Default" \
-  --library "jvm-retrofit2" \
+  --apiName "ApiService" \
   --apiGenDir "./api/api_gen" \
   --splitByTag false \
   --obfuscateOperationId true \
@@ -59,22 +57,23 @@ python3 scripts/main.py \
   --exportMappingOnly false
 ```
 
-### 常用组合（指定包名 + 拆分 + 自定义目录）
+### 常用组合（指定包名 + 拆分 + 输出到 Android 项目）
 ```bash
 python3 scripts/main.py \
   --swaggerApiUrl "./swagger.json" \
   --salt "project-unique-salt" \
   --package "com.myapp.api" \
-  --outputDir "./app/src/main/kotlin" \
+  --outputDir "./app" \
   --splitByTag true
 ```
+生成路径：`./app/src/main/kotlin/com/myapp/api/model/` + `./app/src/main/kotlin/com/myapp/api/api/`
 
 ### 首次生成（URL）
 ```bash
 python3 scripts/main.py \
   --swaggerApiUrl "https://xxx/v2/api-docs" \
   --salt "project-unique-salt" \
-  --outputDir "./api"
+  --package "com.myapp.api"
 ```
 
 ### 首次生成（本地文件）
@@ -82,7 +81,7 @@ python3 scripts/main.py \
 python3 scripts/main.py \
   --swaggerApiUrl "./swagger.json" \
   --salt "project-unique-salt" \
-  --outputDir "./api"
+  --package "com.myapp.api"
 ```
 
 ### 审核模型名后生成
@@ -91,25 +90,25 @@ python3 scripts/main.py \
 python3 scripts/main.py \
   --swaggerApiUrl "https://xxx/v2/api-docs" \
   --salt "project-unique-salt" \
-  --outputDir "./api" \
+  --package "com.myapp.api" \
   --exportMappingOnly true
-# → 编辑 ./api/api_gen/model_name_mapping.json，审核并修正模型名
+# → 编辑 app/api_gen/model_name_mapping.json，审核并修正模型名
 
 # step 2: 直接重跑（自动加载已编辑的 model_name_mapping.json）
 python3 scripts/main.py \
   --swaggerApiUrl "https://xxx/v2/api-docs" \
   --salt "project-unique-salt" \
-  --outputDir "./api"
+  --package "com.myapp.api"
 ```
 
 ### 重新生成（接口变更后）
 ```bash
-# 复用之前的 salt + outputDir，直接重跑即可
+# 复用之前的参数，直接重跑即可
 # 脚本自动检测变更、输出 diff、保持模型名稳定
 python3 scripts/main.py \
   --swaggerApiUrl "https://xxx/v2/api-docs" \
   --salt "project-unique-salt" \
-  --outputDir "./api"
+  --package "com.myapp.api"
 ```
 
 ### 按业务模块拆分
@@ -117,7 +116,7 @@ python3 scripts/main.py \
 python3 scripts/main.py \
   --swaggerApiUrl "https://xxx/v2/api-docs" \
   --salt "project-unique-salt" \
-  --outputDir "./api" \
+  --package "com.myapp.api" \
   --splitByTag true
 ```
 
@@ -126,11 +125,11 @@ python3 scripts/main.py \
 ```
 <outputDir>/
 ├── src/main/kotlin/<package>/
-│   ├── bean/
+│   ├── model/
 │   │   ├── BaseResponse.kt     ← @Serializable data class BaseResponse<T>
 │   │   └── *.kt                ← 含原始名+使用接口+字段描述的注释
 │   └── api/
-│       └── DefaultApi.kt       ← suspend fun + KDoc(描述+路径+响应码)
+│       └── ApiService.kt       ← suspend fun + KDoc(描述+路径+响应码)
 └── api_gen/
     ├── generate.sh              ← 最后成功命令（绝对路径，纳入版本控制）
     ├── command_history.log       ← 所有执行命令及状态（生成成功/跳过/失败）

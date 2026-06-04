@@ -7,22 +7,17 @@ import os
 import sys
 
 
-SUPPORTED_LIBRARIES = {
-    "jvm-retrofit2",
-}
-
-
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="api_gen_py — 将 Swagger API 文档转换为 Kotlin 代码（suspend + Retrofit2 + kotlinx.serialization）"
     )
 
-    parser.add_argument("--outputDir", default="generated-code",
-                        help="输出目录 (默认: generated-code)")
-    parser.add_argument("--package", dest="package_name", default="com.example.api",
-                        help="生成代码的包名 (默认: com.example.api)")
+    parser.add_argument("--outputDir", default="app",
+                        help="输出目录 (默认: app)")
+    parser.add_argument("--package", dest="package_name", default=None,
+                        help="生成代码的根包名 (必填，如 com.myapp.api)")
     parser.add_argument("--modelPackage", dest="model_package", default=None,
-                        help="模型包名 (默认: {package}.bean)")
+                        help="模型包名 (默认: {package}.model)")
     parser.add_argument("--apiPackage", dest="api_package", default=None,
                         help="API 包名 (默认: {package}.api)")
     parser.add_argument("--sourceFolder", dest="source_folder", default=None,
@@ -32,15 +27,13 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--baseResponseName", dest="base_response_name",
                         default="BaseResponse",
                         help="响应基类名称 (默认: BaseResponse)")
-    parser.add_argument("--apiName", default="Default",
-                        help="所有接口的标签名称 (默认: Default)")
+    parser.add_argument("--apiName", default="ApiService",
+                        help="接口名称，--splitByTag false 时生效 (默认: ApiService)")
     parser.add_argument("--obfuscateOperationId", dest="obfuscate_operation_id",
                         default="true",
                         help="是否混淆 operationId (默认: true)")
     parser.add_argument("--salt", default=None,
                         help="混淆盐值 (必填)")
-    parser.add_argument("--library", default="jvm-retrofit2",
-                        help="HTTP 客户端库 (默认: jvm-retrofit2)")
     parser.add_argument("--apiGenDir", dest="api_gen_dir", default=None,
                         help="apiGen 工作目录 (默认: <outputDir>/api_gen)")
     parser.add_argument("--disableModelMapping", dest="disable_model_mapping",
@@ -60,6 +53,11 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
 
     parsed = parser.parse_args(args)
 
+    # 必填参数验证（在默认值推导之前）
+    if not parsed.package_name:
+        print("Error: --package is required (e.g. --package com.myapp.api)")
+        sys.exit(1)
+
     # 布尔值转换
     parsed.obfuscate_operation_id = parsed.obfuscate_operation_id.lower() == "true"
     parsed.disable_model_mapping = parsed.disable_model_mapping.lower() == "true"
@@ -68,7 +66,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
 
     # 默认值推导
     if parsed.model_package is None:
-        parsed.model_package = f"{parsed.package_name}.bean"
+        parsed.model_package = f"{parsed.package_name}.model"
     if parsed.api_package is None:
         parsed.api_package = f"{parsed.package_name}.api"
     if parsed.source_folder is None:
@@ -86,11 +84,6 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         parsed.export_model_name_map = os.path.join(parsed.api_gen_dir, "model_name_mapping.json")
 
     # 验证
-    if parsed.library not in SUPPORTED_LIBRARIES:
-        print(f"Error: unsupported library '{parsed.library}'. "
-              f"Supported values: {', '.join(sorted(SUPPORTED_LIBRARIES))}")
-        sys.exit(1)
-
     if not parsed.salt.strip():
         print("Error: salt is required")
         sys.exit(1)
