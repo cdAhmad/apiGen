@@ -43,10 +43,6 @@ def _swagger_type_to_kotlin(param: dict, definitions: dict) -> str:
 
 
 def _default_value(ktype: str) -> str:
-    if ktype in ("kotlin.Int", "kotlin.Long", "kotlin.Double", "kotlin.Float"):
-        return "0"
-    if ktype == "kotlin.Boolean":
-        return "false"
     return "null"
 
 
@@ -113,7 +109,7 @@ def _gen_model(pkg: str, def_name: str, definition: dict, definitions: dict,
             comment += f" {cn_desc}"
 
         annot = f'@SerialName("{prop_name}") ' if fname != prop_name else ""
-        nullable = "?" if not is_req and ktype != "kotlin.Any" else ""
+        nullable = "?" if not is_req else ""
         default = f" = {_default_value(ktype)}" if not is_req else ""
 
         field_lines.append(f"    {comment}")
@@ -186,29 +182,36 @@ def _gen_api(swagger: dict, pkg: str, model_pkg: str,
                         multipart_params.append(
                             f'@Part("{p.get("name","")}") {pname}: okhttp3.RequestBody')
 
-            # 返回类型
+            # 返回类型 — 优先选择 2xx 响应来确定泛型参数
+            sorted_responses = sorted(responses.items(),
+                                      key=lambda x: (0 if x[0].startswith("2") else 1, x[0]))
             return_type = f"{base_response_name}<kotlin.Any>"
             response_infos = []
-            for code, resp in responses.items():
-                if isinstance(resp, dict):
-                    response_infos.append((code, resp.get("description", "")))
-                    schema = resp.get("schema", {})
-                    if schema:
-                        if "$ref" in schema:
-                            ref = _safe_name(schema["$ref"].split("/")[-1])
-                            return_type = f"{base_response_name}<{ref}>"
-                            model_imports.add(ref)
-                            model_usage.setdefault(ref, []).append(endpoint_desc)
-                        elif schema.get("type") == "array":
-                            items = schema.get("items", {})
-                            if "$ref" in items:
-                                ref = _safe_name(items["$ref"].split("/")[-1])
-                                return_type = f"{base_response_name}<kotlin.collections.List<{ref}>>"
-                                model_imports.add(ref)
-                                model_usage.setdefault(ref, []).append(endpoint_desc)
-                            else:
-                                inner = _swagger_type_to_kotlin(items, definitions)
-                                return_type = f"{base_response_name}<kotlin.collections.List<{inner}>>"
+            type_from_response = None
+            for code, resp in sorted_responses:
+                if not isinstance(resp, dict):
+                    continue
+                response_infos.append((code, resp.get("description", "")))
+                if type_from_response is not None:
+                    continue  # 已从更优先的响应码获取了类型
+                schema = resp.get("schema", {})
+                if "$ref" in schema:
+                    ref = _safe_name(schema["$ref"].split("/")[-1])
+                    type_from_response = f"{base_response_name}<{ref}>"
+                    model_imports.add(ref)
+                    model_usage.setdefault(ref, []).append(endpoint_desc)
+                elif schema.get("type") == "array":
+                    items = schema.get("items", {})
+                    if "$ref" in items:
+                        ref = _safe_name(items["$ref"].split("/")[-1])
+                        type_from_response = f"{base_response_name}<kotlin.collections.List<{ref}>>"
+                        model_imports.add(ref)
+                        model_usage.setdefault(ref, []).append(endpoint_desc)
+                    else:
+                        inner = _swagger_type_to_kotlin(items, definitions)
+                        type_from_response = f"{base_response_name}<kotlin.collections.List<{inner}>>"
+            if type_from_response:
+                return_type = type_from_response
 
             # 构建 Retrofit 注解和参数
             annotations = []
@@ -224,7 +227,11 @@ def _gen_api(swagger: dict, pkg: str, model_pkg: str,
             elif has_body:
                 annotations.append('@Headers("Content-Type: application/json")')
 
-            annotations.append(f'@{method.upper()}("{retrofit_path}")')
+            RETROFIT_METHODS = {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+            if method.upper() in RETROFIT_METHODS:
+                annotations.append(f'@{method.upper()}("{retrofit_path}")')
+            else:
+                annotations.append(f'@HTTP(method = "{method.upper()}", path = "{retrofit_path}")')
 
             func_params = []
             for pp in path_params:
@@ -394,9 +401,6 @@ def generate(input_file: str, output_dir: str, package_name: str,
     # 模型
     count = 0
     for def_name, definition in definitions.items():
-        props = definition.get("properties", {})
-        if "code" in props and "msg" in props:
-            continue
         safe = _safe_name(def_name)
         orig = rev_mapping.get(def_name, "")
         used = model_usage.get(def_name, model_usage.get(safe, []))

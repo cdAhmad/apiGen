@@ -9,23 +9,11 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 
 ## Agent 执行流程
 
-1. **确认必填参数**：`--swaggerApiUrl`（Swagger JSON URL 或本地文件路径）和 `--salt`（缺失则询问用户）
-2. **询问可选参数**：逐项确认以下配置，用户无特殊要求则使用默认值——
-   - `--outputDir`：输出目录（默认 `generated-code`）
-   - `--package`：根包名（默认 `com.example.api`）
-   - `--modelPackage`：模型包名（默认 `{package}.bean`）
-   - `--apiPackage`：API 包名（默认 `{package}.api`）
-   - `--splitByTag`：按 tag 拆分接口（默认 `false`）
-   - `--exportMappingOnly`：仅导出映射不生成代码（默认 `false`）
-   - `--modelNameMap`：固定映射 JSON 文件路径（增量用）
-   - `--disableModelMapping`：禁用模型名混淆（默认 `false`）
-   - `--baseResponseName`：响应包装类名（默认 `BaseResponse`）
-   - `--obfuscateOperationId`：混淆 operationId（默认 `true`）
-   - `--apiName`：API 接口名称（默认 `Default`）
-   - `--library`：HTTP 客户端库（默认 `jvm-retrofit2`）
+1. **确认必填参数**：询问 `--swaggerApiUrl` 和 `--salt`。salt 建议用项目名（如 `myapp`），一旦确定不可更换。缺失则询问用户。
+2. **可选参数**：全部使用默认值。仅在用户明确指定时才覆盖（如"包名用 com.xxx"、"按模块拆分"等），无需逐项询问。
 3. **进入 skill 目录**：`cd api_gen_py`
 4. **运行生成**：`python3 scripts/main.py ...`
-5. **报告结果**：文件数量、API 方法数、公共 header 数
+5. **报告结果**：输出目录、host、生成/跳过状态；如有新模型映射则展示给用户确认
 
 ## 命令行参考
 
@@ -41,7 +29,7 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 | `--splitByTag` | `false` | 按 tag 拆分多接口 |
 | `--exportMappingOnly` | `false` | 仅导出映射，不生成代码 |
 | `--exportModelNameMap` | `<apiGenDir>/model_name_mapping.json` | 映射导出路径 |
-| `--modelNameMap` | - | 固定映射 JSON（增量用） |
+| `--modelNameMap` | - | 固定映射 JSON（增量用，`apiGenDir` 下有 `model_name_mapping.json` 则自动加载） |
 | `--disableModelMapping` | `false` | 禁用模型名混淆 |
 | `--baseResponseName` | `BaseResponse` | 响应包装类名 |
 | `--obfuscateOperationId` | `true` | 混淆 operationId |
@@ -50,6 +38,26 @@ description: 将 Swagger/OpenAPI 文档转换为 Kotlin 代码（suspend + Retro
 | `--apiGenDir` | `<outputDir>/api_gen` | apiGen 工作目录 |
 
 ## 典型场景
+
+### 完整命令（全部参数）
+```bash
+python3 scripts/main.py \
+  --swaggerApiUrl "https://xxx/v2/api-docs" \
+  --salt "project-unique-salt" \
+  --outputDir "./api" \
+  --package "com.example.api" \
+  --modelPackage "com.example.api.bean" \
+  --apiPackage "com.example.api.api" \
+  --sourceFolder "src/main/kotlin" \
+  --baseResponseName "BaseResponse" \
+  --apiName "Default" \
+  --library "jvm-retrofit2" \
+  --apiGenDir "./api/api_gen" \
+  --splitByTag false \
+  --obfuscateOperationId true \
+  --disableModelMapping false \
+  --exportMappingOnly false
+```
 
 ### 常用组合（指定包名 + 拆分 + 自定义目录）
 ```bash
@@ -79,17 +87,38 @@ python3 scripts/main.py \
 
 ### 审核模型名后生成
 ```bash
-# step 1: 导出映射
-python3 scripts/main.py ... --exportMappingOnly true
-# → 编辑 {outputDir}/api_gen/model_name_mapping.json
+# step 1: 导出映射（仅导出，不生成代码）
+python3 scripts/main.py \
+  --swaggerApiUrl "https://xxx/v2/api-docs" \
+  --salt "project-unique-salt" \
+  --outputDir "./api" \
+  --exportMappingOnly true
+# → 编辑 ./api/api_gen/model_name_mapping.json，审核并修正模型名
 
-# step 2: 用固定映射生成
-python3 scripts/main.py ... --modelNameMap "./api/api_gen/model_name_mapping.json"
+# step 2: 直接重跑（自动加载已编辑的 model_name_mapping.json）
+python3 scripts/main.py \
+  --swaggerApiUrl "https://xxx/v2/api-docs" \
+  --salt "project-unique-salt" \
+  --outputDir "./api"
+```
+
+### 重新生成（接口变更后）
+```bash
+# 复用之前的 salt + outputDir，直接重跑即可
+# 脚本自动检测变更、输出 diff、保持模型名稳定
+python3 scripts/main.py \
+  --swaggerApiUrl "https://xxx/v2/api-docs" \
+  --salt "project-unique-salt" \
+  --outputDir "./api"
 ```
 
 ### 按业务模块拆分
 ```bash
-python3 scripts/main.py ... --splitByTag true
+python3 scripts/main.py \
+  --swaggerApiUrl "https://xxx/v2/api-docs" \
+  --salt "project-unique-salt" \
+  --outputDir "./api" \
+  --splitByTag true
 ```
 
 ## 生成产物
@@ -103,24 +132,64 @@ python3 scripts/main.py ... --splitByTag true
 │   └── api/
 │       └── DefaultApi.kt       ← suspend fun + KDoc(描述+路径+响应码)
 └── api_gen/
-    ├── generate.sh              ← 最后成功命令（相对路径，纳入版本控制）
+    ├── generate.sh              ← 最后成功命令（绝对路径，纳入版本控制）
     ├── command_history.log       ← 所有执行命令及状态（生成成功/跳过/失败）
     ├── model_name_mapping.json  ← 模型名映射（纳入版本控制）
     ├── swagger_update.log       ← 全量变更日志
-    └── logs/
-        ├── changelog_*.md       ← 每次变更独立报告
-        ├── common_headers.json  ← 公共 header 列表
-        └── swagger_md5.txt      ← MD5 缓存
+    ├── logs/
+    │   ├── default_OpenAPI.json  ← 下载的原始 Swagger JSON
+    │   ├── swagger_old.json      ← 上次 Swagger 快照（用于 diff）
+    │   ├── temp.json             ← 清洗混淆后的中间文件
+    │   ├── changelog_*.md        ← 每次变更独立报告
+    │   ├── common_headers.json   ← 公共 header 列表
+    │   └── swagger_md5.txt       ← MD5 缓存
+    └── history/
+        ├── swagger_*.json        ← Swagger 历史快照
+        └── code_<ts>/            ← 旧代码备份
 ```
 
 ## 关键行为
 
-- **命令记录**：每次执行追加 `api_gen/command_history.log`（时间戳 + host + 完整命令 + 执行状态）；生成成功后覆盖 `api_gen/generate.sh`（相对路径，可复现）
+- **命令记录**：每次执行追加 `api_gen/command_history.log`（时间戳 + host + 完整命令 + 执行状态）；生成成功后覆盖 `api_gen/generate.sh`（绝对路径脚本，可直接运行复现）
 - **MD5 去重**：Swagger 未变更时跳过生成
 - **变更检测**：Swagger 更新时输出字段级 diff（新增/删除参数、返回字段、响应码变更）
 - **自动备份**：变更时将旧代码备份到 `api_gen/history/code_<ts>/`
-- **模型名稳定**：首次运行导出映射，后续用 `--modelNameMap` 保持模型名不变
-- **公共 Header**：自动识别跨接口公共 header，生成 `ApiHeaders.createHeaders()` 方法
+- **模型名稳定**：首次运行导出映射，后续自动加载 `api_gen/model_name_mapping.json`，无需手动指定 `--modelNameMap`
+- **新增模型检测**：Swagger 新增 definition 时脚本中断，导出新映射并提示用户确认后再运行
+- **公共 Header**：出现率 >= 90% 的 header 参数自动识别为公共 header，生成 `ApiHeaders.createHeaders()` 方法；非公共 header 会被移除（需手动添加 `@Header` 注解）
+- **包装器剥离**：自动检测并移除具有 `code` + `msg` 属性的响应包装器模型，释放出真实数据类型
+
+## Agent 处理指引
+
+### 脚本退出场景
+
+| 输出关键字 | 原因 | Agent 应做 |
+|-----------|------|-----------|
+| `swagger json file has not changed` | MD5 未变 | 告知用户 Swagger 无变更，已跳过生成 |
+| `New model names detected (need confirmation)` | 新增 definition | 见下方「新模型映射确认交互」详细流程 |
+| `new model mappings need confirmation` | 同上（main.py 提示） | 同上 |
+| `Code generation failed` | 生成异常 | 展示错误堆栈，建议用户检查 Swagger 格式 |
+
+### 首次生成 vs 增量生成
+
+- **首次生成**：`--modelNameMap` 不传，脚本自动导出完整映射，正常生成代码
+- **增量生成**：已有 `model_name_mapping.json` 时自动加载，新增模型会中断要求确认；无新增则直接生成
+- **仅导出映射**：`--exportMappingOnly true`，不生成代码，用户审核映射后再跑增量
+
+### 重新生成（Swagger 接口变更后）
+
+1. 优先查找 `api_gen/generate.sh` 或 `command_history.log`，复用之前的 `--salt` 和 `--outputDir`
+2. 直接重跑相同命令，脚本自动检测 Swagger 变更并输出 diff
+3. 无需重新询问参数，除非用户明确要修改
+
+### 新模型映射确认交互
+
+当脚本输出 `New model names detected (need confirmation)` 时：
+
+1. 将新增映射列表展示给用户（格式：`{原始名} → {混淆名}`）
+2. 询问是否确认，或需要修改某些映射名
+3. **用户确认** → 直接重跑相同命令（映射已自动导出到 `model_name_mapping.json`）
+4. **用户需修改** → 等用户编辑完 `model_name_mapping.json` 后再重跑
 
 ## 生成代码特征
 
@@ -133,6 +202,6 @@ python3 scripts/main.py ... --splitByTag true
 
 ## 注意事项
 
-- **salt 一旦确定不可更换**，否则所有混淆名变化，现有引用全部失效
+- **salt 一旦确定不可更换**，否则所有混淆名变化，现有引用全部失效。注意脚本会自动在 salt 前拼接 `swagger-kotlin-codegen-salt-` 前缀再参与哈希计算
 - `model_name_mapping.json` 和 `generate.sh` 应纳入版本控制
 - 需要 Python 3.10+，无需 pip install，直接运行脚本即可

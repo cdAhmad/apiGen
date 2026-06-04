@@ -86,11 +86,23 @@ class SwaggerUpdater:
                 details.append(f"    + 新增 {pin} 参数: {desc}")
             else:
                 op = old_map[key]
-                # 检查类型变更
-                ot = op.get("type", op.get("schema", {}).get("$ref", ""))
-                nt = np.get("type", np.get("schema", {}).get("$ref", ""))
-                if ot != nt:
-                    details.append(f"    * 类型变更 {self._param_desc(np)}: {ot} → {nt}")
+                # 检查类型变更（仅当两边类型来源一致时才比较）
+                ot_primitive = op.get("type", "")
+                nt_primitive = np.get("type", "")
+                ot_ref = op.get("schema", {}).get("$ref", "")
+                nt_ref = np.get("schema", {}).get("$ref", "")
+                if ot_primitive and nt_primitive:
+                    if ot_primitive != nt_primitive:
+                        details.append(f"    * 类型变更 {self._param_desc(np)}: {ot_primitive} → {nt_primitive}")
+                elif ot_ref and nt_ref:
+                    if ot_ref != nt_ref:
+                        details.append(f"    * 类型变更 {self._param_desc(np)}: {ot_ref} → {nt_ref}")
+                elif (ot_primitive or ot_ref) and (nt_primitive or nt_ref):
+                    # 一侧是原始类型另一侧是引用，这算真正的变更
+                    ot_desc = ot_primitive or ot_ref
+                    nt_desc = nt_primitive or nt_ref
+                    if ot_desc != nt_desc:
+                        details.append(f"    * 类型变更 {self._param_desc(np)}: {ot_desc} → {nt_desc}")
                 # 检查 body 参数的 schema 字段变更
                 if op.get("in") == "body" and np.get("in") == "body":
                     old_body_schema = op.get("schema", {})
@@ -295,7 +307,10 @@ class SwaggerUpdater:
             if not self.download_swagger_json():
                 return False
         else:
-            print(f"swaggerapiurl is empty, using local file: {self.downloaded_file}")
+            if not os.path.isfile(self.downloaded_file):
+                print(f"Error: swaggerapiurl is empty and no cached file found at {self.downloaded_file}")
+                return False
+            print(f"swaggerapiurl is empty, using cached file: {self.downloaded_file}")
 
         # 计算 MD5
         try:
@@ -342,7 +357,6 @@ class SwaggerUpdater:
                     f.write(f"  - {p}\n")
 
             # 保存基线
-            import shutil
             shutil.copy(self.downloaded_file, self.old_file)
         else:
             # 检测变更
@@ -353,7 +367,6 @@ class SwaggerUpdater:
                 changes = {"added_paths": [], "removed_paths": [], "modified_paths": []}
 
             # 保存历史快照
-            import shutil
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             shutil.copy(self.downloaded_file,
                        os.path.join(self.history_dir, f"swagger_{timestamp}.json"))

@@ -175,10 +175,7 @@ class CleanSwaggerScript:
                     new_id = new_id[0].lower() + new_id[1:] if new_id else new_id
                     operation["operationId"] = new_id
 
-        # 步骤 2：移除 originalRef
-        self._deep_remove_key(swagger, "originalRef")
-
-        # 步骤 3：剥离响应包装器（code/msg/data）
+        # 步骤 2：剥离响应包装器（code/msg/data）— 必须在移除 originalRef 之前，因为需要 originalRef 作为 fallback
         definitions = swagger.get("definitions", {})
         wrapper_models = set()
         wrapper_data_refs: dict[str, dict] = {}
@@ -227,6 +224,9 @@ class CleanSwaggerScript:
         # 移除包装器模型定义
         for wname in wrapper_models:
             definitions.pop(wname, None)
+
+        # 步骤 3：移除 originalRef（包装器剥离完成后不再需要）
+        self._deep_remove_key(swagger, "originalRef")
 
         # 步骤 4：过滤非标准 HTTP 代码
         for path, methods in swagger.get("paths", {}).items():

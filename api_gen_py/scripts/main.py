@@ -157,7 +157,7 @@ def main():
     if os.path.exists(src_dir):
         ts = __import__('datetime').datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = os.path.join(args.api_gen_dir, "history", f"code_{ts}")
-        __import__('shutil').copytree(src_dir, backup_dir)
+        __import__('shutil').copytree(src_dir, backup_dir, dirs_exist_ok=True)
         print(f"Backed up previous code to {backup_dir}")
 
     print("\nGenerating Kotlin code...")
@@ -186,7 +186,9 @@ def main():
             f.write(f"  -> 失败: {e}\n\n")
         return
 
-    # 5.1 写入 generate.sh（仅在实际生成成功后覆盖，使用相对路径）
+    # 5.1 写入 generate.sh（仅在实际生成成功后覆盖）
+    script_path = os.path.abspath(__file__)
+    output_dir_abs = os.path.abspath(args.outputDir)
     cmd_file = os.path.join(args.api_gen_dir, "generate.sh")
     with open(cmd_file, "w", encoding="utf-8") as f:
         f.write("#!/bin/bash\n")
@@ -195,7 +197,21 @@ def main():
         f.write(f"# host:  {host}\n")
         f.write(f"# Salt:  {args.salt}\n")
         f.write("cd \"$(dirname \"$0\")/..\"\n")
-        f.write(cmd_line + "\n")
+        f.write(f"python3 {script_path}")
+        if formatted_args:
+            f.write(" \\\n")
+            for i, a in enumerate(formatted_args):
+                # 将相对路径 outputDir 替换为绝对路径，确保从任意目录运行都正确
+                if a.startswith("--outputDir ") or a.startswith("--outputDir="):
+                    parts = a.split(" ", 1)
+                    if len(parts) == 2:
+                        a = f"--outputDir {output_dir_abs}"
+                    else:
+                        a = f"--outputDir={output_dir_abs}"
+                suffix = " \\\n" if i < len(formatted_args) - 1 else "\n"
+                f.write(f"  {a}{suffix}")
+        else:
+            f.write("\n")
     os.chmod(cmd_file, 0o755)
     print(f"Command saved to {cmd_file}")
 

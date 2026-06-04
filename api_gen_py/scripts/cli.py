@@ -34,7 +34,8 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
                         help="响应基类名称 (默认: BaseResponse)")
     parser.add_argument("--apiName", default="Default",
                         help="所有接口的标签名称 (默认: Default)")
-    parser.add_argument("--obfuscateOperationId", default="true",
+    parser.add_argument("--obfuscateOperationId", dest="obfuscate_operation_id",
+                        default="true",
                         help="是否混淆 operationId (默认: true)")
     parser.add_argument("--salt", default=None,
                         help="混淆盐值 (必填)")
@@ -60,7 +61,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parsed = parser.parse_args(args)
 
     # 布尔值转换
-    parsed.obfuscate_operation_id = parsed.obfuscateOperationId.lower() == "true"
+    parsed.obfuscate_operation_id = parsed.obfuscate_operation_id.lower() == "true"
     parsed.disable_model_mapping = parsed.disable_model_mapping.lower() == "true"
     parsed.export_mapping_only = parsed.export_mapping_only.lower() == "true"
     parsed.split_by_tag = parsed.split_by_tag.lower() == "true"
@@ -90,7 +91,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
               f"Supported values: {', '.join(sorted(SUPPORTED_LIBRARIES))}")
         sys.exit(1)
 
-    if not parsed.salt:
+    if not parsed.salt.strip():
         print("Error: salt is required")
         sys.exit(1)
 
