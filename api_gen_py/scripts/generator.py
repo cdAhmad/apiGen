@@ -359,17 +359,17 @@ def generate(input_file: str, output_dir: str, package_name: str,
              base_response_name: str, library: str,
              common_headers: list[dict] | None = None,
              model_name_mapping: dict[str, str] | None = None,
-             split_by_tag: bool = False, tag_info: dict | None = None):
+             split_by_tag: bool = False, tag_info: dict | None = None,
+             source_folder: str = "src/main/kotlin"):
     """从清洗后的 Swagger JSON 生成 Kotlin 项目"""
     with open(input_file, encoding="utf-8") as f:
         swagger = json.load(f)
 
     definitions = swagger.get("definitions", {})
 
-    model_path = os.path.join(output_dir, "src", "main", "kotlin",
-                              *model_package.split("."))
-    api_path = os.path.join(output_dir, "src", "main", "kotlin",
-                            *api_package.split("."))
+    src_parts = tuple(source_folder.strip("/").split("/"))
+    model_path = os.path.join(output_dir, *src_parts, *model_package.split("."))
+    api_path = os.path.join(output_dir, *src_parts, *api_package.split("."))
     os.makedirs(model_path, exist_ok=True)
     os.makedirs(api_path, exist_ok=True)
 

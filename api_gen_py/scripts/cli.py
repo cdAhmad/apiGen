@@ -14,7 +14,7 @@ SUPPORTED_LIBRARIES = {
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="api_gen_py — 将 Swagger API 文档转换为 Kotlin 代码（flow + retrofit2）"
+        description="api_gen_py — 将 Swagger API 文档转换为 Kotlin 代码（suspend + Retrofit2 + kotlinx.serialization）"
     )
 
     parser.add_argument("--outputDir", default="generated-code",
